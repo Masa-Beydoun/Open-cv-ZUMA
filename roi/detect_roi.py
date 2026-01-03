@@ -1,7 +1,10 @@
 import cv2
 import numpy as np
 
-from game_region import GameRegion
+try:
+    from .game_region import GameRegion
+except Exception:
+    from game_region import GameRegion
 
 def analyze_game_screen(input_source, save_path=None):
     if isinstance(input_source, str):

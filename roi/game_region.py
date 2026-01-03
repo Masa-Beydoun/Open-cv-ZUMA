@@ -19,6 +19,15 @@ class GameRegion:
 
     def to_global(self, local_x, local_y):
         return (self.x + local_x, self.y + local_y)
+    
+    def to_mss_dict(self, monitor_offset_x=0, monitor_offset_y=0):
+        """تحويل البيانات لصيغة مكتبة MSS"""
+        return {
+            "top": self.y + monitor_offset_y,
+            "left": self.x + monitor_offset_x,
+            "width": self.w,
+            "height": self.h
+        }
 
     def __str__(self):
         return f"GameRegion(x={self.x}, y={self.y}, w={self.w}, h={self.h})"
