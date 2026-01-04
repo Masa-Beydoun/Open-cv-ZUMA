@@ -3,10 +3,20 @@ import numpy as np
 import os
 import glob
 
+
+
+try:
+    from constants import GAME_VERSION
+except ImportError:
+    import sys, os
+
+    sys.path.append(os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
+    from constants import GAME_VERSION
+
+
 # ==========================================
 # إعدادات
 # ==========================================
-ASSET_FOLDER = "beach"
 WINDOW_NAME = "Multi-Ball Tuner"
 # قمت بزيادة الحجم قليلاً ليكون العرض أوضح بعد إضافة الهوامش
 THUMB_SIZE = 150 
@@ -72,7 +82,7 @@ def load_images(folder):
     return images, names
 
 def run_multi_tuner():
-    images, names = load_images(ASSET_FOLDER)
+    images, names = load_images(GAME_VERSION)
     if not images: return
 
     cv2.namedWindow(WINDOW_NAME, cv2.WINDOW_NORMAL)

@@ -7,14 +7,17 @@ from ignored_zone_manager import IgnoredZonesManager
 from extract_color_methods import ExtractColorMethod
 
 try:
+    from constants import MONITOR
+    from constants import GAME_VERSION
     from roi.detect_roi import analyze_game_screen
 except ImportError:
     import sys, os
 
     sys.path.append(os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
     from roi.detect_roi import analyze_game_screen
+    from constants import GAME_VERSION
+    from constants import MONITOR
 
-GAME_VERSION = "beach"
 
 Deluxe3 = {
     "extract_color_method": ExtractColorMethod.MEAN,
@@ -361,8 +364,7 @@ if __name__ == "__main__":
     cv2.resizeWindow(window_name, 600, 450)
 
     with mss.mss() as sct:
-        monitor_number = 1
-        full_monitor = sct.monitors[monitor_number]
+        full_monitor = sct.monitors[MONITOR]
 
         # إذا لم تكن هناك مناطق، نعرض خيار الرسم في البداية
         if not ignored_zones:
