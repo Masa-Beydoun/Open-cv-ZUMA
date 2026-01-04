@@ -1,0 +1,3 @@
+# Ignore testing samples used for local development
+/balls_detection/testing_samples/
+

@@ -7,168 +7,61 @@ from ignored_zone_manager import IgnoredZonesManager
 from extract_color_methods import ExtractColorMethod
 
 try:
-    from constants import MONITOR
-    from constants import GAME_VERSION
+    from constants import *
     from roi.detect_roi import analyze_game_screen
 except ImportError:
     import sys, os
 
     sys.path.append(os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
     from roi.detect_roi import analyze_game_screen
-    from constants import GAME_VERSION
-    from constants import MONITOR
-
-
-Deluxe3 = {
-    "extract_color_method": ExtractColorMethod.MEAN,
-    "assets": {
-        "ball_0.png": "Purple",
-        "ball_1.png": "Blue",
-        "ball_2.png": "Yellow",
-        "ball_3.png": "Green",
-        "ball_4.png": "Red",
-    },
-    "hc_config": {
-        "LARGE": {
-            "REFERENCE_WIDTH": 1000,
-            "params": {
-                "minDist": 13,
-                "minRadius": 13,
-                "maxRadius": 26,
-                "param1": 66,
-                "param2": 42,
-            },
-        },
-        "SMALL": {
-            "REFERENCE_WIDTH": 730,
-            "params": {
-                "minDist": 9,
-                "minRadius": 5,
-                "maxRadius": 20,
-                "param1": 42,
-                "param2": 28,
-            },
-        },
-    },
-}
-
-Beach = {
-    "extract_color_method": ExtractColorMethod.MEAN,
-    "assets": {
-        "ball_0.png": "Green",
-        "ball_1.png": "Orange",
-        "ball_2.png": "Pink",
-        "ball_3.png": "Blue",
-        "ball_4.png": "Yellow",
-        "ball_5.png": "Cyan",
-    },
-    "hc_config": {
-        "LARGE": {
-            "REFERENCE_WIDTH": 1000,
-            "params": {
-                "minDist": 19,
-                "minRadius": 11,
-                "maxRadius": 36,
-                "param1": 84,
-                "param2": 30,
-            },
-        },
-        "SMALL": {
-            "REFERENCE_WIDTH": 730,
-            "params": {
-                "minDist": 18,
-                "minRadius": 9,
-                "maxRadius": 28,
-                "param1": 62,
-                "param2": 26,
-            },
-        },
-    },
-}
-
-Space = {
-    "extract_color_method": ExtractColorMethod.MEAN,
-    "assets": {
-        "ball_0.png": "Red",
-        "ball_1.png": "Cyan",
-        "ball_2.png": "Yellow",
-        "ball_3.png": "Green",
-        "ball_4.png": "Pink",
-        "ball_5.png": "orange",
-        "ball_6.png": "Purple",
-    },
-    "hc_config": {
-        "LARGE": {
-            "REFERENCE_WIDTH": 1000,
-            "params": {
-                "minDist": 7,
-                "minRadius": 10,
-                "maxRadius": 27,
-                "param1": 71,
-                "param2": 33,
-            },
-        },
-        "SMALL": {
-            "REFERENCE_WIDTH": 730,
-            "params": {
-                "minDist": 9,
-                "minRadius": 7,
-                "maxRadius": 22,
-                "param1": 57,
-                "param2": 26,
-            },
-        },
-    },
-}
+    from constants import *
 
 
 class ZumaBot:
 
-    def __init__(self):
-        self.known_colors = {}
+    def __init__(self, game_config):
+        self.hue_sat = game_config["hue_sat"]
+        self.extract_color_method = game_config["extract_color_method"]
+        self.hc_config = game_config["hc_config"]
 
-        self.extract_color_method = Beach["extract_color_method"]
-        self.asset_map = Beach["assets"]
-        self.CONFIGS = Beach["hc_config"]
+    # def load_assets(self, asset_folder):
 
-    def load_assets(self, asset_folder):
+    #     OPT_SAT = 30
+    #     OPT_CROP_Y = 0.20
+    #     OPT_CROP_X = 0.20
 
-        OPT_SAT = 30
-        OPT_CROP_Y = 0.20
-        OPT_CROP_X = 0.20
+    #     for filename, color_name in self.asset_map.items():
+    #         path = os.path.join(asset_folder, filename)
+    #         image = cv2.imread(path, cv2.IMREAD_UNCHANGED)
+    #         if image is None:
+    #             continue
 
-        for filename, color_name in self.asset_map.items():
-            path = os.path.join(asset_folder, filename)
-            image = cv2.imread(path, cv2.IMREAD_UNCHANGED)
-            if image is None:
-                continue
+    #         h, w = image.shape[:2]
+    #         y_start = int(h * OPT_CROP_Y)
+    #         x_end = int(w * (1 - OPT_CROP_X))
+    #         image = image[y_start:h, 0:x_end]
 
-            h, w = image.shape[:2]
-            y_start = int(h * OPT_CROP_Y)
-            x_end = int(w * (1 - OPT_CROP_X))
-            image = image[y_start:h, 0:x_end]
+    #         if image.shape[2] == 4:
+    #             bgr = image[:, :, :3]
+    #             alpha = image[:, :, 3]
+    #             hsv = cv2.cvtColor(bgr, cv2.COLOR_BGR2HSV)
+    #             mask = (alpha > 0) & (hsv[:, :, 1] > OPT_SAT)
+    #         else:
+    #             hsv = cv2.cvtColor(image, cv2.COLOR_BGR2HSV)
+    #             mask = hsv[:, :, 1] > OPT_SAT
 
-            if image.shape[2] == 4:
-                bgr = image[:, :, :3]
-                alpha = image[:, :, 3]
-                hsv = cv2.cvtColor(bgr, cv2.COLOR_BGR2HSV)
-                mask = (alpha > 0) & (hsv[:, :, 1] > OPT_SAT)
-            else:
-                hsv = cv2.cvtColor(image, cv2.COLOR_BGR2HSV)
-                mask = hsv[:, :, 1] > OPT_SAT
-
-            if np.count_nonzero(mask) > 0:
-                # ---------------------------------------------------------
-                # >>> هنا يتم الفحص الأول <<<
-                # ---------------------------------------------------------
-                if self.extract_color_method == ExtractColorMethod.DOMINANT:
-                    # الطريقة الجديدة: اللون الطاغي
-                    hue, sat = self.get_dominant_color_features(hsv, mask)
-                    self.known_colors[color_name] = (hue, sat)
-                else:
-                    # الطريقة القديمة: المتوسط الحسابي
-                    mean_color = cv2.mean(hsv, mask=mask.astype(np.uint8))
-                    self.known_colors[color_name] = (mean_color[0], mean_color[1])
+    #         if np.count_nonzero(mask) > 0:
+    #             # ---------------------------------------------------------
+    #             # >>> هنا يتم الفحص الأول <<<
+    #             # ---------------------------------------------------------
+    #             if self.extract_color_method == ExtractColorMethod.DOMINANT:
+    #                 # الطريقة الجديدة: اللون الطاغي
+    #                 hue, sat = self.get_dominant_color_features(hsv, mask)
+    #                 self.hue_sat[color_name] = (hue, sat)
+    #             else:
+    #                 # الطريقة القديمة: المتوسط الحسابي
+    #                 mean_color = cv2.mean(hsv, mask=mask.astype(np.uint8))
+    #                 self.hue_sat[color_name] = (mean_color[0], mean_color[1])
 
     def get_dominant_color_features(self, hsv_img, mask=None):
         """
@@ -220,7 +113,7 @@ class ZumaBot:
         best_match = None
         min_diff = 999
 
-        for color_name, (known_hue, known_sat) in self.known_colors.items():
+        for color_name, (known_hue, known_sat) in self.hue_sat.items():
             diff = abs(hue - known_hue)
             if diff > 90:
                 diff = 180 - diff
@@ -238,10 +131,10 @@ class ZumaBot:
         """
         # 1. تحديد أي بروفايل سنستخدم
         if current_width >= 1000:
-            config = self.CONFIGS["LARGE"]
+            config = self.hc_config["LARGE"]
             # print("Using LARGE Profile") # للتجربة
         else:
-            config = self.CONFIGS["SMALL"]
+            config = self.hc_config["SMALL"]
             # print("Using SMALL Profile") # للتجربة
 
         ref_width = config["REFERENCE_WIDTH"]
@@ -328,7 +221,7 @@ class ZumaBot:
                     cv2.circle(output, (x, y), r, (0, 0, 0), 2)
 
                     # رسم مركز صغير
-                    cv2.circle(output, (x, y), 2, (255, 255, 255), -1)
+                    cv2.circle(output, (x, y), 3, (0, 0, 255), -1)
 
                     # النص اختياري الآن، لكن يمكن تركه صغيراً
                     cv2.putText(
@@ -336,7 +229,7 @@ class ZumaBot:
                         color_name,
                         (x - 10, y - 10),
                         cv2.FONT_HERSHEY_SIMPLEX,
-                        1,
+                        0.3,
                         (0, 0, 0),
                         1,
                     )
@@ -344,129 +237,171 @@ class ZumaBot:
         return output
 
 
-if __name__ == "__main__":
-    current_dir = os.path.dirname(os.path.abspath(__file__))
-    project_root = os.path.dirname(current_dir)
-    assets_path = os.path.join(project_root, GAME_VERSION)
+def run_single_image_debug(image_path, game_config):
+    """
+    تقوم بتحميل صورة واحدة، وتطبيق الكشف عليها، وعرض النتيجة.
+    """
+    print(f"\n--- Starting Debug on: {image_path} ---")
 
-    # 1. إعداد المناطق المتجاهلة
-    zone_manager = IgnoredZonesManager("ignored_zones.json")
-    ignored_zones = zone_manager.load_zones()
+    # 1. تحميل الصورة
+    frame = cv2.imread(image_path)
+    if frame is None:
+        print(f"Error: Could not load image from '{image_path}'")
+        return
 
-    # 2. إعداد البوت
-    bot = ZumaBot()
-    print("Loading assets...")
-    bot.load_assets(assets_path)
+    # 2. إعداد البوت مع الكونفيج المطلوب
+    print("Initializing bot with selected configuration...")
+    bot = ZumaBot(game_config)
 
-    # إعداد النافذة
-    window_name = "Zuma Bot - Live Monitor"
+    # 3. تشغيل الكشف
+    print("Running detection...")
+    # يمكنك تمرير مناطق التجاهل هنا إذا أردت اختبارها أيضاً
+    # ignored_zones = [(x,y,w,h), ...]
+    result_frame = bot.detect_from_frame(frame, ignored_zones=[])
+
+    # 4. عرض النتائج
+    window_name = "Debug Result (Press any key to close)"
     cv2.namedWindow(window_name, cv2.WINDOW_NORMAL)
-    cv2.resizeWindow(window_name, 600, 450)
+    cv2.imshow(window_name, result_frame)
 
-    with mss.mss() as sct:
-        full_monitor = sct.monitors[MONITOR]
+    print("Result displayed. Press any key in the window to finish.")
+    cv2.waitKey(0)
+    cv2.destroyAllWindows()
+    print("--- Debug Finished ---\n")
 
-        # إذا لم تكن هناك مناطق، نعرض خيار الرسم في البداية
-        if not ignored_zones:
-            print("No ignored zones found. Capturing screen for setup...")
-            screenshot = np.array(sct.grab(full_monitor))
-            screenshot = cv2.cvtColor(screenshot, cv2.COLOR_BGRA2BGR)
 
-            # محاولة إيجاد منطقة اللعبة لتسهيل الرسم
-            region_setup = analyze_game_screen(screenshot)
-            if region_setup:
-                # نقص صورة اللعبة فقط للرسم عليها
-                x, y, w, h = (
-                    region_setup.x,
-                    region_setup.y,
-                    region_setup.w,
-                    region_setup.h,
-                )
-                game_img = screenshot[y : y + h, x : x + w]
-                # استدعاء دالة الرسم
-                ignored_zones = zone_manager.select_zones(game_img)
-            else:
-                print("Could not find game for setup zone selection.")
+if __name__ == "__main__":
 
-        # متغيرات الحلقة الرئيسية
-        capture_area = None
-        last_recheck_time = 0
-        RECHECK_INTERVAL = 1.5
+    IS_REALTIME = False
+    SELECTED_CONFIG = Space
 
-        # متغيرات قياس الأداء
-        fps = 0
-        frame_count = 0
-        start_time = time.time()
+    if not IS_REALTIME:
 
-        print("Starting Main Loop...")
+        SCREENSHOT_PATH = "balls_detection/testing_samples/beach_3.png"
 
-        while True:
-            loop_start = time.time()
+        run_single_image_debug(SCREENSHOT_PATH, SELECTED_CONFIG)
 
-            # --- Check Periodically ---
-            if loop_start - last_recheck_time > RECHECK_INTERVAL:
-                full_screenshot = np.array(sct.grab(full_monitor))
-                full_screenshot_bgr = cv2.cvtColor(full_screenshot, cv2.COLOR_BGRA2BGR)
-                new_region_data = analyze_game_screen(full_screenshot_bgr)
+    else:
+        # 1. إعداد المناطق المتجاهلة
+        zone_manager = IgnoredZonesManager("ignored_zones.json")
+        # ignored_zones = zone_manager.load_zones()
+        ignored_zones = None
 
-                if new_region_data:
-                    capture_area = new_region_data.to_mss_dict(
-                        full_monitor["left"], full_monitor["top"]
+        # 2. إعداد البوت
+        bot = ZumaBot(SELECTED_CONFIG)
+        print("Loading assets...")
+
+        # إعداد النافذة
+        window_name = "Zuma Bot - Live Monitor"
+        cv2.namedWindow(window_name, cv2.WINDOW_NORMAL)
+        cv2.resizeWindow(window_name, 600, 450)
+
+        with mss.mss() as sct:
+            full_monitor = sct.monitors[MONITOR]
+
+            # إذا لم تكن هناك مناطق، نعرض خيار الرسم في البداية
+            if not ignored_zones:
+                print("No ignored zones found. Capturing screen for setup...")
+                screenshot = np.array(sct.grab(full_monitor))
+                screenshot = cv2.cvtColor(screenshot, cv2.COLOR_BGRA2BGR)
+
+                # محاولة إيجاد منطقة اللعبة لتسهيل الرسم
+                region_setup = analyze_game_screen(screenshot)
+                if region_setup:
+                    # نقص صورة اللعبة فقط للرسم عليها
+                    x, y, w, h = (
+                        region_setup.x,
+                        region_setup.y,
+                        region_setup.w,
+                        region_setup.h,
                     )
-                last_recheck_time = loop_start
+                    game_img = screenshot[y : y + h, x : x + w]
+                    # استدعاء دالة الرسم
+                    # ignored_zones = zone_manager.select_zones(game_img)
+                else:
+                    print("Could not find game for setup zone selection.")
 
-            # --- Tracking ---
-            if capture_area:
-                try:
-                    sct_img = sct.grab(capture_area)
-                    frame = np.array(sct_img)
-                    frame = cv2.cvtColor(frame, cv2.COLOR_BGRA2BGR)
+            # متغيرات الحلقة الرئيسية
+            capture_area = None
+            last_recheck_time = 0
+            RECHECK_INTERVAL = 1.5
 
-                    # ---------------------------------------------------------
-                    # استدعاء التتبع مع تمرير المناطق المتجاهلة
-                    # (يمكنك تمرير path_mask مستقبلاً هنا)
-                    # ---------------------------------------------------------
-                    result = bot.detect_from_frame(
-                        frame, ignored_zones=ignored_zones, path_mask=None
+            # متغيرات قياس الأداء
+            fps = 0
+            frame_count = 0
+            start_time = time.time()
+
+            print("Starting Main Loop...")
+
+            while True:
+                loop_start = time.time()
+
+                # --- Check Periodically ---
+                if loop_start - last_recheck_time > RECHECK_INTERVAL:
+                    full_screenshot = np.array(sct.grab(full_monitor))
+                    full_screenshot_bgr = cv2.cvtColor(
+                        full_screenshot, cv2.COLOR_BGRA2BGR
                     )
+                    new_region_data = analyze_game_screen(full_screenshot_bgr)
 
-                    # حساب الـ FPS
-                    frame_count += 1
-                    elapsed = time.time() - start_time
-                    if elapsed > 1.0:  # تحديث كل ثانية
-                        fps = frame_count / elapsed
-                        frame_count = 0
-                        start_time = time.time()
+                    if new_region_data:
+                        capture_area = new_region_data.to_mss_dict(
+                            full_monitor["left"], full_monitor["top"]
+                        )
+                    last_recheck_time = loop_start
 
-                    # عرض الـ FPS على الشاشة
+                # --- Tracking ---
+                if capture_area:
+                    try:
+                        sct_img = sct.grab(capture_area)
+                        frame = np.array(sct_img)
+                        frame = cv2.cvtColor(frame, cv2.COLOR_BGRA2BGR)
+
+                        # ---------------------------------------------------------
+                        # استدعاء التتبع مع تمرير المناطق المتجاهلة
+                        # (يمكنك تمرير path_mask مستقبلاً هنا)
+                        # ---------------------------------------------------------
+                        result = bot.detect_from_frame(
+                            frame, ignored_zones=ignored_zones, path_mask=None
+                        )
+
+                        # حساب الـ FPS
+                        frame_count += 1
+                        elapsed = time.time() - start_time
+                        if elapsed > 1.0:  # تحديث كل ثانية
+                            fps = frame_count / elapsed
+                            frame_count = 0
+                            start_time = time.time()
+
+                        # عرض الـ FPS على الشاشة
+                        cv2.putText(
+                            result,
+                            f"FPS: {int(fps)}",
+                            (10, 30),
+                            cv2.FONT_HERSHEY_SIMPLEX,
+                            0.7,
+                            (0, 0, 0),
+                            2,
+                        )
+
+                        cv2.imshow(window_name, result)
+
+                    except Exception as e:
+                        print(f"Error: {e}")
+                else:
+                    blank_screen = np.zeros((300, 500, 3), dtype=np.uint8)
                     cv2.putText(
-                        result,
-                        f"FPS: {int(fps)}",
-                        (10, 30),
+                        blank_screen,
+                        "Searching...",
+                        (50, 150),
                         cv2.FONT_HERSHEY_SIMPLEX,
-                        0.7,
-                        (0, 0, 0),
+                        1,
+                        (0, 255, 255),
                         2,
                     )
+                    cv2.imshow(window_name, blank_screen)
 
-                    cv2.imshow(window_name, result)
+                if cv2.waitKey(1) & 0xFF == ord("q"):
+                    break
 
-                except Exception as e:
-                    print(f"Error: {e}")
-            else:
-                blank_screen = np.zeros((300, 500, 3), dtype=np.uint8)
-                cv2.putText(
-                    blank_screen,
-                    "Searching...",
-                    (50, 150),
-                    cv2.FONT_HERSHEY_SIMPLEX,
-                    1,
-                    (0, 255, 255),
-                    2,
-                )
-                cv2.imshow(window_name, blank_screen)
-
-            if cv2.waitKey(1) & 0xFF == ord("q"):
-                break
-
-        cv2.destroyAllWindows()
+            cv2.destroyAllWindows()
