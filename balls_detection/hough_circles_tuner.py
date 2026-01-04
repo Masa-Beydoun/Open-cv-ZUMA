@@ -17,7 +17,7 @@ drawing = False
 ix, iy = -1, -1
 current_rect = None
 zones_buffer = []
-
+MONITOR = 1
 def draw_zone_callback(event, x, y, flags, param):
     global ix, iy, drawing, current_rect, zones_buffer
     
@@ -106,11 +106,11 @@ def select_zones_manually(img):
 
 # --- بقية كود الـ Tuner ---
 def nothing(x): pass
-
+    
 def run_tuner():
     print("Looking for game window...")
     with mss.mss() as sct:
-        monitor = sct.monitors[1]
+        monitor = sct.monitors[MONITOR]
         full_img = np.array(sct.grab(monitor))
         full_img = cv2.cvtColor(full_img, cv2.COLOR_BGRA2BGR)
         region = analyze_game_screen(full_img)
@@ -173,7 +173,7 @@ def run_tuner():
                 circles = np.round(circles[0, :]).astype("int")
                 detected_count = len(circles)
                 for (x, y, r) in circles:
-                    cv2.circle(output, (x, y), r, (0, 0, 0), 1)
+                    cv2.circle(output, (x, y), r, (0, 255, 255), 2)
                     cv2.circle(output, (x, y), 2, (255, 0, 0), 1)
 
             info_text = [

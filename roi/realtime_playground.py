@@ -5,6 +5,7 @@ import numpy as np
 
 from detect_roi import analyze_game_screen
 
+MONITOR = 1
 
 def run_dynamic_game_viewer():
     print("--- تشغيل العارض الديناميكي (يلاحق السكرول والزوم) ---")
@@ -21,7 +22,7 @@ def run_dynamic_game_viewer():
 
     with mss.mss() as sct:
         # الشاشة التي سنراقبها (الشاشة الرئيسية)
-        monitor_full = sct.monitors[1]
+        monitor_full = sct.monitors[MONITOR]
         
         while True:
             loop_start = time.time()
