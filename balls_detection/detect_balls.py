@@ -164,20 +164,13 @@ class ZumaBot:
         output = frame.copy()
         gray = cv2.cvtColor(frame, cv2.COLOR_BGR2GRAY)
 
-        # 1. تطبيق المناطق المتجاهلة (رسم مربعات سوداء على الصورة الرمادية)
-        # هذا يمنع HoughCircles من رؤية أي شيء هنا
+        # Initialize the list to store results
+        detected_balls = []
+
         if ignored_zones:
             for x, y, w, h in ignored_zones:
                 cv2.rectangle(gray, (x, y), (x + w, y + h), 0, -1)
 
-        # 2. (مستقبلاً) تطبيق قناع المسار
-        # إذا تم تمرير قناع، نطبق bitwise_and لإخفاء كل شيء خارج المسار
-        if path_mask is not None:
-            # تأكد أن القناع بنفس حجم الصورة
-            # gray = cv2.bitwise_and(gray, gray, mask=path_mask)
-            pass
-
-        # 3. حساب القياس النسبي
         current_w = frame.shape[1]
         params = self.get_adaptive_params(current_w)
 
@@ -216,14 +209,18 @@ class ZumaBot:
                 color_name = self.identify_color(roi)
 
                 if color_name:
+                    # --- ADD TO LIST ---
+                    ball_data = {
+                        "color": color_name,
+                        "x": int(x),
+                        "y": int(y),
+                        "radius": int(r),  # Optional, but often useful
+                    }
+                    detected_balls.append(ball_data)
 
-                    # رسم الدائرة بلون الكرة
+                    # --- VISUALIZATION (Keep existing drawing code) ---
                     cv2.circle(output, (x, y), r, (0, 0, 0), 2)
-
-                    # رسم مركز صغير
                     cv2.circle(output, (x, y), 3, (0, 0, 255), -1)
-
-                    # النص اختياري الآن، لكن يمكن تركه صغيراً
                     cv2.putText(
                         output,
                         color_name,
@@ -234,7 +231,49 @@ class ZumaBot:
                         1,
                     )
 
-        return output
+        # Return BOTH the image and the data list
+        return output, detected_balls
+
+
+def sort_balls_by_path(balls, path_points):
+    """
+    Sorts the detected balls based on their progress along the path.
+
+    Args:
+        balls: List of dicts [{'x': 100, 'y': 200, 'color': 'RED'}, ...]
+        path_points: List of (x, y) tuples representing the path from START to SKULL.
+                     Example: [(0,0), (1,0), ... (500, 500)]
+
+    Returns:
+        List of balls sorted by who is closest to the end of the path.
+    """
+    if not balls or not path_points:
+        return balls
+
+    # Convert path to numpy array for fast calculation (if it isn't already)
+    path_arr = np.array(path_points)
+
+    for ball in balls:
+        ball_pos = np.array([ball["x"], ball["y"]])
+
+        # 1. Calculate distance from this ball to EVERY point on the path
+        # (Using Euclidean distance: sqrt((x2-x1)^2 + (y2-y1)^2))
+        distances = np.linalg.norm(path_arr - ball_pos, axis=1)
+
+        # 2. Find the index of the minimum distance
+        # This index represents "how far along" the track the ball is.
+        # Index 0 = Start, Index MAX = The Skull
+        closest_path_index = np.argmin(distances)
+
+        # Store this index in the ball's data so we can use it later if needed
+        ball["path_index"] = closest_path_index
+
+    # 3. Sort the list based on 'path_index'
+    # reverse=True means Descending Order (Highest Index first)
+    # This puts the ball closest to the Skull at the top of the list.
+    sorted_balls = sorted(balls, key=lambda b: b["path_index"], reverse=True)
+
+    return sorted_balls
 
 
 def run_single_image_debug(image_path, game_config):
@@ -257,8 +296,8 @@ def run_single_image_debug(image_path, game_config):
     print("Running detection...")
     # يمكنك تمرير مناطق التجاهل هنا إذا أردت اختبارها أيضاً
     # ignored_zones = [(x,y,w,h), ...]
-    result_frame = bot.detect_from_frame(frame, ignored_zones=[])
-
+    result_frame, balls = bot.detect_from_frame(frame, ignored_zones=[])
+    print(balls)
     # 4. عرض النتائج
     window_name = "Debug Result (Press any key to close)"
     cv2.namedWindow(window_name, cv2.WINDOW_NORMAL)
@@ -272,12 +311,12 @@ def run_single_image_debug(image_path, game_config):
 
 if __name__ == "__main__":
 
-    IS_REALTIME = False
-    SELECTED_CONFIG = Space
+    IS_REALTIME = True
+    SELECTED_CONFIG = Deluxe3
 
     if not IS_REALTIME:
 
-        SCREENSHOT_PATH = "balls_detection/testing_samples/beach_3.png"
+        SCREENSHOT_PATH = "balls_detection/testing_samples/delux_1.png"
 
         run_single_image_debug(SCREENSHOT_PATH, SELECTED_CONFIG)
 
@@ -289,7 +328,6 @@ if __name__ == "__main__":
 
         # 2. إعداد البوت
         bot = ZumaBot(SELECTED_CONFIG)
-        print("Loading assets...")
 
         # إعداد النافذة
         window_name = "Zuma Bot - Live Monitor"
@@ -324,7 +362,7 @@ if __name__ == "__main__":
             # متغيرات الحلقة الرئيسية
             capture_area = None
             last_recheck_time = 0
-            RECHECK_INTERVAL = 1.5
+            RECHECK_INTERVAL = 20
 
             # متغيرات قياس الأداء
             fps = 0
@@ -332,6 +370,8 @@ if __name__ == "__main__":
             start_time = time.time()
 
             print("Starting Main Loop...")
+
+            balls = []
 
             while True:
                 loop_start = time.time()
@@ -361,7 +401,7 @@ if __name__ == "__main__":
                         # استدعاء التتبع مع تمرير المناطق المتجاهلة
                         # (يمكنك تمرير path_mask مستقبلاً هنا)
                         # ---------------------------------------------------------
-                        result = bot.detect_from_frame(
+                        result, balls = bot.detect_from_frame(
                             frame, ignored_zones=ignored_zones, path_mask=None
                         )
 
@@ -380,7 +420,7 @@ if __name__ == "__main__":
                             (10, 30),
                             cv2.FONT_HERSHEY_SIMPLEX,
                             0.7,
-                            (0, 0, 0),
+                            (255, 255, 255),
                             2,
                         )
 

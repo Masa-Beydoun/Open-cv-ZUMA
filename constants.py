@@ -1,7 +1,7 @@
 from balls_detection.extract_color_methods import ExtractColorMethod
 
 # beach - space - deluxe3
-GAME_VERSION = "beach"
+GAME_VERSION = "deluxe3"
 
 # رقم الشاشة تاكدو انو دائما واحد لان انا يمكن اقلبو تنين مشان اشتغل عالشاشة التانية
 MONITOR = 1
@@ -34,11 +34,11 @@ Deluxe3 = {
         "SMALL": {
             "REFERENCE_WIDTH": 730,
             "params": {
-                "minDist": 9,
+                "minDist": 8,
                 "minRadius": 5,
-                "maxRadius": 20,
-                "param1": 42,
-                "param2": 28,
+                "maxRadius": 17,
+                "param1": 39,
+                "param2": 25,
             },
         },
     },
@@ -59,21 +59,21 @@ Space = {
         "LARGE": {
             "REFERENCE_WIDTH": 1000,
             "params": {
-                "minDist": 7,
+                "minDist": 11,
                 "minRadius": 10,
                 "maxRadius": 27,
-                "param1": 71,
-                "param2": 33,
+                "param1": 27,
+                "param2": 30,
             },
         },
         "SMALL": {
             "REFERENCE_WIDTH": 730,
             "params": {
-                "minDist": 9,
-                "minRadius": 7,
-                "maxRadius": 22,
-                "param1": 57,
-                "param2": 26,
+                "minDist": 12,
+                "minRadius": 9,
+                "maxRadius": 19,
+                "param1": 32,
+                "param2": 24,
             },
         },
     },
