@@ -16,6 +16,8 @@ except ImportError:
     from roi.detect_roi import analyze_game_screen
     from constants import *
 
+    from frog_detection.ZumaFrogDetector import ZumaFrogDetector
+
 
 class ZumaBot:
 
