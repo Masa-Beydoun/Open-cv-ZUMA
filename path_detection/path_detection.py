@@ -43,11 +43,11 @@ def get_combined_mask_improved(img, config):
                 (v > config.get('val_low', 20))).astype(np.uint8) * 255
     combined = cv2.bitwise_or(mask_hsv, mask_sat)
     
-    margin_w, margin_h = int(w * 0.05), int(h * 0.05)
-    cv2.rectangle(combined, (0, 0), (w, margin_h), 0, -1)
-    cv2.rectangle(combined, (0, h - margin_h), (w, h), 0, -1)
-    cv2.rectangle(combined, (0, 0), (margin_w, h), 0, -1)
-    cv2.rectangle(combined, (w - margin_w, 0), (w, h), 0, -1)
+    # margin_w, margin_h = int(w * 0.05), int(h * 0.05)
+    # cv2.rectangle(combined, (0, 0), (w, margin_h), 0, -1)
+    # cv2.rectangle(combined, (0, h - margin_h), (w, h), 0, -1)
+    # cv2.rectangle(combined, (0, 0), (margin_w, h), 0, -1)
+    # cv2.rectangle(combined, (w - margin_w, 0), (w, h), 0, -1)
     
     for (rx1, ry1, rx2, ry2) in config.get('ui_masks_pct', []):
         ix1, iy1 = int(rx1 * w), int(ry1 * h)
@@ -341,7 +341,8 @@ def solve_zuma_path(img, config):
         'start': start_point,
         'end': end_point,
         'hole': hole_center,
-        'path': full_path
+        'path': full_path,
+        'mask': clean_mask  
     }
 
 def print_path_coordinates(result, label):
@@ -369,7 +370,7 @@ ZUMA_DELUXE_CONFIG = {
     'min_noise_area': 500,
     'min_component_area': 1000,
     'border_size': 10,
-    'ui_masks': [(0, 0, 160, 80), (800, 0, 1000, 80)],
+    # 'ui_masks': [(0, 0, 160, 80), (800, 0, 1000, 80)],
     'frog_center_mask': None,
     'remove_frog_auto': True
 }

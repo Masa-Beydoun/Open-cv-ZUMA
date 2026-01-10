@@ -8,59 +8,83 @@ from path_detection.path_detection import (
     ZUMA_SPACE_CONFIG, ZUMA_DELUXE_CONFIG, ZUMA_GREEN_JUNGLE_CONFIG
 )
 
+def get_largest_component(mask):
+    
+    if mask is None: return None
+    
+    num_labels, labels, stats, _ = cv2.connectedComponentsWithStats(mask, connectivity=8)
+    
+    if num_labels <= 1: 
+        return mask
+
+    largest_label = 1 + np.argmax(stats[1:, cv2.CC_STAT_AREA])
+    
+    cleaned_mask = np.zeros_like(mask)
+    cleaned_mask[labels == largest_label] = 255
+    
+    return cleaned_mask
+
 def capture_game_path(config):
-    """
-    يبحث عن نافذة اللعبة ويستخرج مسار الكرات بصيغة Global Coordinates (إحداثيات الشاشة).
-    """
-    print(f"--- Initializing Path Capture ---")
+
+    print(f"--- Initializing Path & Mask Capture ---")
     global_path = None
+    path_mask = None 
 
     with mss.mss() as sct:
-        # استخدام الشاشة الأولى كمصدر
         monitor_full = sct.monitors[1]
         
         while True:
-            # 1. التقاط كامل الشاشة
             screenshot = np.array(sct.grab(monitor_full))
             frame = cv2.cvtColor(screenshot, cv2.COLOR_BGRA2BGR)
-
-            # 2. تحديد منطقة اللعبة (Game ROI)
+            
+            # 1. تحديد منطقة اللعبة
             game_region = analyze_game_screen(frame, save_path=None)
 
             if game_region:
                 x, y, w, h = game_region.x, game_region.y, game_region.w, game_region.h
                 cropped_game = frame[y:y+h, x:x+w]
 
-                # 3. معالجة المسار داخل منطقة اللعبة فقط
+                # 2. استدعاء خوارزمية حل المسار
                 result_data = solve_zuma_path(cropped_game, config)
 
-                if result_data and result_data.get('path'):
-                    # 4. تحويل المسار من محلي (Local) إلى عالمي (Global)
-                    global_path = [(lx + x, ly + y) for (lx, ly) in result_data['path']]
+                if result_data and result_data.get('mask') is not None:
+                    # تحويل إحداثيات النقاط لـ Global
+                    global_path = [(lx + x, ly + y) for (lx, ly) in result_data.get('path', [])]
                     
-                    print(f"[SUCCESS] Captured {len(global_path)} path points.")
+                    # --- معالجة الماسك الاحترافية ---
+                    raw_mask = result_data['mask']
                     
-                    # معاينة بصرية سريعة
-                    if 'visual' in result_data:
-                        visual_output = cv2.cvtColor(result_data['visual'], cv2.COLOR_RGB2BGR)
-                        cv2.imshow("Calibration - Path Found", visual_output)
-                        cv2.waitKey(1500) # انتظار ثانية ونصف للمعاينة
+                    # أ- ملء الفجوات (Closing) لربط المسار المقطع
+                    kernel_close = cv2.getStructuringElement(cv2.MORPH_ELLIPSE, (9, 9))
+                    temp_mask = cv2.morphologyEx(raw_mask, cv2.MORPH_CLOSE, kernel_close)
                     
+                    # ب- حذف أي ضجيج أو قطع صغيرة (النقاط اللي بالزوايا)
+                    clean_single_mask = get_largest_component(temp_mask)
+                    
+                    # ج- إضافة Padding (توسيع) للمسار ليغطي عرض الكرة
+                    kernel_dilate = cv2.getStructuringElement(cv2.MORPH_ELLIPSE, (7, 7))
+                    path_mask = cv2.dilate(clean_single_mask, kernel_dilate, iterations=3)
+                    
+                    print(f"[SUCCESS] Captured Path and Cleaned/Padded Mask.")
                     break 
                 else:
-                    print("Game detected but path tracing failed. Check lighting/assets.")
+                    print("Game detected but path tracing failed. Retrying...")
             else:
-                print("Searching for Zuma game window on screen...")
+                print("Searching for Zuma game window...")
 
             if cv2.waitKey(1) & 0xFF == ord('q'):
                 break
-            
             time.sleep(0.2) 
 
     cv2.destroyAllWindows()
-    return global_path
+    return global_path, path_mask
 
 if __name__ == "__main__":
-    # مثال للاستخدام:
-    path = capture_game_path(ZUMA_DELUXE_CONFIG)
+    points, mask = capture_game_path(ZUMA_GREEN_JUNGLE_CONFIG)
+    
+    if mask is not None:
+        print(f"Path Points: {len(points) if points else 0}")
+        cv2.imshow("Final Clean Mask", mask)
+        cv2.waitKey(0)
+        cv2.destroyAllWindows()
     
