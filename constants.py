@@ -42,6 +42,11 @@ Deluxe3 = {
             },
         },
     },
+    "explosion_assets": [
+        "delux3/explosion1.png",
+        "delux3/explosion2.png",
+        "delux3/explosion3.png",
+    ],
 }
 
 Space = {

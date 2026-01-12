@@ -3,20 +3,21 @@ import numpy as np
 import time
 import os
 import mss
-from ignored_zone_manager import IgnoredZonesManager
-from extract_color_methods import ExtractColorMethod
 
 try:
     from constants import *
     from roi.detect_roi import analyze_game_screen
+    from balls_detection.ignored_zone_manager import IgnoredZonesManager
+    from balls_detection.extract_color_methods import ExtractColorMethod
+
 except ImportError:
     import sys, os
 
     sys.path.append(os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
     from roi.detect_roi import analyze_game_screen
+    from balls_detection.ignored_zone_manager import IgnoredZonesManager
+    from balls_detection.extract_color_methods import ExtractColorMethod
     from constants import *
-
-    from frog_detection.ZumaFrogDetector import ZumaFrogDetector
 
 
 class ZumaBot:
