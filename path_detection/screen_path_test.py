@@ -1,8 +1,27 @@
 import cv2
 import mss
 import numpy as np
-from roi.detect_roi import analyze_game_screen
-from path_detection.path_detection import solve_zuma_path, ZUMA_SPACE_CONFIG , ZUMA_DELUXE_CONFIG ,ZUMA_GREEN_JUNGLE_CONFIG 
+
+try:
+    from roi.detect_roi import analyze_game_screen
+    from path_detection.path_detection import (
+        solve_zuma_path,
+        ZUMA_SPACE_CONFIG,
+        ZUMA_DELUXE_CONFIG,
+        ZUMA_GREEN_JUNGLE_CONFIG,
+    )
+
+except ImportError:
+    import sys, os
+
+    sys.path.append(os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
+    from roi.detect_roi import analyze_game_screen
+    from path_detection import (
+        solve_zuma_path,
+        ZUMA_SPACE_CONFIG,
+        ZUMA_DELUXE_CONFIG,
+        ZUMA_GREEN_JUNGLE_CONFIG,
+    )
 
 def run_zuma_solver():
     config = ZUMA_SPACE_CONFIG 

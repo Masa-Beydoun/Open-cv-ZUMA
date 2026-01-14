@@ -5,10 +5,17 @@ import os
 import mss
 
 try:
-    from constants import *
     from roi.detect_roi import analyze_game_screen
     from balls_detection.ignored_zone_manager import IgnoredZonesManager
     from balls_detection.extract_color_methods import ExtractColorMethod
+    from path_detection.capture_game_path import capture_game_path
+    from path_detection.get_ball_position import get_ball_progress
+    from path_detection.path_detection import (
+        ZUMA_GREEN_JUNGLE_CONFIG,
+        ZUMA_SPACE_CONFIG,
+        ZUMA_DELUXE_CONFIG,
+    )
+    from constants import *
 
 except ImportError:
     import sys, os
@@ -17,6 +24,13 @@ except ImportError:
     from roi.detect_roi import analyze_game_screen
     from balls_detection.ignored_zone_manager import IgnoredZonesManager
     from balls_detection.extract_color_methods import ExtractColorMethod
+    from path_detection.capture_game_path import capture_game_path
+    from path_detection.get_ball_position import get_ball_progress
+    from path_detection.path_detection import (
+        ZUMA_GREEN_JUNGLE_CONFIG,
+        ZUMA_SPACE_CONFIG,
+        ZUMA_DELUXE_CONFIG,
+    )
     from constants import *
 
 
@@ -163,7 +177,31 @@ class ZumaBot:
 
         return final_params
 
-    def detect_from_frame(self, frame, ignored_zones=[], path_mask=None):
+    def calculate_ball_progress(self, ball_center, path_points_np):
+        """
+        تحسب موقع الكرة على المسار.
+        path_points_np: مصفوفة numpy تحتوي على نقاط المسار [(x,y), ...]
+        """
+        if path_points_np is None or len(path_points_np) == 0:
+            return -1
+
+        # حساب المسافة بين مركز الكرة وجميع نقاط المسار دفعة واحدة
+        # ball_center shape: (1, 2) | path_points_np shape: (N, 2)
+        dist = np.linalg.norm(path_points_np - np.array(ball_center), axis=1)
+
+        # إيجاد أقرب نقطة (index)
+        closest_idx = np.argmin(dist)
+        min_dist = dist[closest_idx]
+
+        # إذا كانت الكرة بعيدة جداً عن خط المسار (مثلاً كرة طائرة في الهواء)، نعيد -1
+        if min_dist > 40:  # هذا الرقم يعتمد على دقة المسار وحجم الكرة
+            return -1
+
+        return closest_idx
+
+    def detect_from_frame(
+        self, frame, ignored_zones=[], path_mask=None, path_points=None
+    ):
         output = frame.copy()
         gray = cv2.cvtColor(frame, cv2.COLOR_BGR2GRAY)
 
@@ -190,9 +228,14 @@ class ZumaBot:
             maxRadius=params["maxRadius"],
         )
 
+        total_path_length = 0
+        if path_points is not None:
+            total_path_length = len(path_points)
+
         if circles is not None:
             circles = np.round(circles[0, :]).astype("int")
             for x, y, r in circles:
+                # أ- فحوصات الحدود للصورة
                 if (
                     y - r < 0
                     or x - r < 0
@@ -201,40 +244,96 @@ class ZumaBot:
                 ):
                     continue
 
-                roi_r = int(r * 0.7)
-                y1, y2 = max(0, y - roi_r), min(frame.shape[0], y + roi_r)
-                x1, x2 = max(0, x - roi_r), min(frame.shape[1], x + roi_r)
-                roi = frame[y1:y2, x1:x2]
+                # ب- فحوصات القناع (هل الكرة فوق المسار؟)
+                if path_mask is not None:
+                    # يجب أن تكون إحداثيات المركز داخل حدود القناع
+                    if 0 <= y < path_mask.shape[0] and 0 <= x < path_mask.shape[1]:
+                        # إذا كانت النقطة سوداء (0)، فهي خارج المسار
+                        if path_mask[y, x] == 0:
+                            continue
+                    else:
+                        continue
 
+                # ج- استخراج اللون
+                roi = frame[
+                    max(0, y - r) : min(frame.shape[0], y + r),
+                    max(0, x - r) : min(frame.shape[1], x + r),
+                ]
                 if roi.size == 0:
                     continue
 
                 color_name = self.identify_color(roi)
 
                 if color_name:
-                    # --- ADD TO LIST ---
-                    ball_data = {
-                        "color": color_name,
-                        "x": int(x),
-                        "y": int(y),
-                        "radius": int(r),  # Optional, but often useful
+                    dist_to_hole = 99999  # قيمة افتراضية عالية للكرات البعيدة عن المسار
+
+                    # د- حساب المسافة (الرابط مع المسار)
+                    if path_points is not None:
+                        # بما أن المسار يبدأ من الحفرة (Index 0)، فالإندكس هو المسافة المتبقية
+                        idx = get_ball_progress((x, y), path_points)
+
+                        if idx != -1:
+                            dist_to_hole = idx
+                        else:
+                            # الكرة بعيدة عن الخط الأخضر -> نتجاهلها
+                            continue
+
+                    # هـ- بناء كائن الكرة النهائي
+                    ball_info = {
+                        "color": color_name,  # لون الكرة (RED, BLUE...)
+                        "position": (int(x), int(y)),  # الموقع (x, y) بالنسبة للصورة
+                        "radius": int(r),  # نصف القطر
+                        "distance": int(dist_to_hole),
                     }
-                    detected_balls.append(ball_data)
+                    detected_balls.append(ball_info)
 
-                    # --- VISUALIZATION (Keep existing drawing code) ---
-                    cv2.circle(output, (x, y), r, (0, 0, 0), 2)
-                    cv2.circle(output, (x, y), 3, (0, 0, 255), -1)
-                    cv2.putText(
-                        output,
-                        color_name,
-                        (x - 10, y - 10),
-                        cv2.FONT_HERSHEY_SIMPLEX,
-                        0.3,
-                        (0, 0, 0),
-                        1,
-                    )
+        # 4. الترتيب النهائي (الأهم)
+        # نرتب تصاعدياً (reverse=False):
+        # المسافة 0 (الحفرة) -> تأتي أولاً في القائمة
+        # المسافة 1000 (البداية) -> تأتي أخيراً
+        detected_balls.sort(key=lambda b: b["distance"], reverse=False)
 
-        # Return BOTH the image and the data list
+        # 5. الرسم (Visualization)
+        for rank, ball in enumerate(detected_balls):
+            x, y = ball["position"]
+            r = ball["radius"]
+            dist = ball["distance"]
+
+            cv2.circle(output, (x, y), r, (255, 255, 255), 2)
+
+            # كتابة الترتيب (#1 هو الأخطر)
+            rank_text = f"#{rank + 1}"
+            cv2.putText(
+                output,
+                rank_text,
+                (x - 10, y + 5),
+                cv2.FONT_HERSHEY_SIMPLEX,
+                0.6,
+                (0, 0, 0),
+                4,
+            )
+            cv2.putText(
+                output,
+                rank_text,
+                (x - 10, y + 5),
+                cv2.FONT_HERSHEY_SIMPLEX,
+                0.6,
+                (0, 255, 255),
+                2,
+            )
+
+            # كتابة المسافة
+            cv2.putText(
+                output,
+                f"{dist}",
+                (x - 10, y + r + 15),
+                cv2.FONT_HERSHEY_SIMPLEX,
+                0.4,
+                (200, 200, 255),
+                1,
+            )
+
+        # نعيد الصورة + القائمة المرتبة
         return output, detected_balls
 
 
@@ -315,7 +414,9 @@ def run_single_image_debug(image_path, game_config):
 if __name__ == "__main__":
 
     IS_REALTIME = True
+    # تأكد من اختيار الإعدادات المناسبة للمرحلة التي تلعبها
     SELECTED_CONFIG = Deluxe3
+    PATH_CONFIG = ZUMA_DELUXE_CONFIG  # أو ZUMA_SPACE_CONFIG حسب الصورة
 
     if not IS_REALTIME:
 
@@ -332,6 +433,9 @@ if __name__ == "__main__":
         # 2. إعداد البوت
         bot = ZumaBot(SELECTED_CONFIG)
 
+        # متغيرات لتخزين المسار "المحلي" (الثابت بالنسبة للعبة)
+        local_path_points = None
+        cached_path_mask = None
         # إعداد النافذة
         window_name = "Zuma Bot - Live Monitor"
         cv2.namedWindow(window_name, cv2.WINDOW_NORMAL)
@@ -339,38 +443,42 @@ if __name__ == "__main__":
 
         with mss.mss() as sct:
             full_monitor = sct.monitors[MONITOR]
+            global_path_points, raw_mask = capture_game_path(PATH_CONFIG)
 
-            # إذا لم تكن هناك مناطق، نعرض خيار الرسم في البداية
-            if not ignored_zones:
-                print("No ignored zones found. Capturing screen for setup...")
-                screenshot = np.array(sct.grab(full_monitor))
-                screenshot = cv2.cvtColor(screenshot, cv2.COLOR_BGRA2BGR)
+            # --- ب. تحويل المسار إلى "محلي" فوراً ---
+            if global_path_points is not None:
+                # نحتاج لمعرفة أين كانت اللعبة لحظة التقاط المسار لنقوم بالطرح
+                # سنأخذ لقطة سريعة لمعرفة مكان اللعبة الآن
+                temp_screen = np.array(sct.grab(full_monitor))
+                temp_frame = cv2.cvtColor(temp_screen, cv2.COLOR_BGRA2BGR)
+                region = analyze_game_screen(temp_frame)
 
-                # محاولة إيجاد منطقة اللعبة لتسهيل الرسم
-                region_setup = analyze_game_screen(screenshot)
-                if region_setup:
-                    # نقص صورة اللعبة فقط للرسم عليها
-                    x, y, w, h = (
-                        region_setup.x,
-                        region_setup.y,
-                        region_setup.w,
-                        region_setup.h,
-                    )
-                    game_img = screenshot[y : y + h, x : x + w]
-                    # استدعاء دالة الرسم
-                    # ignored_zones = zone_manager.select_zones(game_img)
+                if region:
+                    capture_x, capture_y = region.x, region.y
+
+                    # التحويل: النقطة المحلية = النقطة العالمية - بداية النافذة
+                    local_path_points = [
+                        (gx - capture_x, gy - capture_y)
+                        for gx, gy in global_path_points
+                    ]
+                    cached_path_mask = raw_mask  # الماسك دائماً محلي (صورة مقصوصة)
+                    print("Path converted to Local Coordinates successfully.")
                 else:
-                    print("Could not find game for setup zone selection.")
+                    print("Error: Could not find game window to randomize local path.")
+            else:
+                print("Warning: Path not detected! Bot will work without path logic.")
 
             # متغيرات الحلقة الرئيسية
             capture_area = None
             last_recheck_time = 0
-            RECHECK_INTERVAL = 20
+            RECHECK_INTERVAL = 3
 
             # متغيرات قياس الأداء
             fps = 0
             frame_count = 0
             start_time = time.time()
+
+            game_x, game_y = 0, 0
 
             print("Starting Main Loop...")
 
@@ -388,9 +496,27 @@ if __name__ == "__main__":
                     new_region_data = analyze_game_screen(full_screenshot_bgr)
 
                     if new_region_data:
+                        game_x = new_region_data.x
+                        game_y = new_region_data.y
+
                         capture_area = new_region_data.to_mss_dict(
                             full_monitor["left"], full_monitor["top"]
                         )
+
+                        # تحديث المسار المحلي (Local Path) إذا كان لدينا مسار عالمي (Global)
+                        if global_path_points:
+                            # تحويل Global -> Local: (Gx - GameX, Gy - GameY)
+                            local_points = [
+                                (gx - game_x, gy - game_y)
+                                for gx, gy in global_path_points
+                            ]
+                            cached_path_points = local_points
+
+                            # Mask هو صورة، حجمه ثابت بحجم اللعبة، لا يحتاج إزاحة، فقط تأكد من الحجم
+                            cached_path_mask = (
+                                raw_mask  # نفترض أن حجمه يطابق حجم اللعبة المكتشفة
+                            )
+
                     last_recheck_time = loop_start
 
                 # --- Tracking ---
@@ -405,8 +531,17 @@ if __name__ == "__main__":
                         # (يمكنك تمرير path_mask مستقبلاً هنا)
                         # ---------------------------------------------------------
                         result, balls = bot.detect_from_frame(
-                            frame, ignored_zones=ignored_zones, path_mask=None
+                            frame,
+                            ignored_zones=ignored_zones,
+                            # path_mask=cached_path_mask,  # تمرير القناع
+                            path_points=cached_path_points,  # تمرير النقاط
                         )
+
+                        if cached_path_points:
+                            # رسم خط بسيط يمثل المسار
+                            pts = np.array(cached_path_points, np.int32)
+                            pts = pts.reshape((-1, 1, 2))
+                            cv2.polylines(result, [pts], False, (0, 255, 0), 1)
 
                         # حساب الـ FPS
                         frame_count += 1
@@ -448,3 +583,5 @@ if __name__ == "__main__":
                     break
 
             cv2.destroyAllWindows()
+
+        print(balls)

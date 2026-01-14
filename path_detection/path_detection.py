@@ -272,21 +272,21 @@ def generate_line_points(p1, p2):
 def solve_zuma_path(img, config):
 
     if img is None: return None
-    
+
     img_rgb = cv2.cvtColor(img, cv2.COLOR_BGR2RGB)
     h, w = img.shape[:2]
 
     if 'ui_masks_pct' in config:
         config['ui_masks'] = [(int(x1*w), int(y1*h), int(x2*w), int(y2*h)) 
                              for (x1, y1, x2, y2) in config['ui_masks_pct']]
-    
+
     hole_center = find_finish_hole_improved(img, config)
     if hole_center is None: return None
-    
+
     raw_mask = get_combined_mask_improved(img, config)
-    
+
     clean_mask = clean_mask_morphology(raw_mask, config)
-    
+
     h, w = clean_mask.shape[:2]
     for (rx1, ry1, rx2, ry2) in config.get('ui_masks_pct', []):
         ix1, iy1 = int(rx1 * w), int(ry1 * h)
@@ -297,46 +297,46 @@ def solve_zuma_path(img, config):
     skel_bool = skeletonize(clean_mask > 0)
     skeleton = (skel_bool * 255).astype(np.uint8)
     skeleton = remove_noise_by_area(skeleton, min_area=30)
-    
+
     start_point, end_point, full_path, connected_skeleton = order_all_segments(
         skeleton, hole_center, max_gap=config.get('max_gap', 100)
     )
-    
+
     result = img_rgb.copy()
     thick_skel = cv2.dilate(connected_skeleton, np.ones((2, 2), np.uint8), iterations=1)
     result[thick_skel > 0] = [0, 255, 0]
-    
+
     cv2.circle(result, hole_center, 15, (255, 255, 0), 3)
     cv2.putText(result, "HOLE", (hole_center[0] + 20, hole_center[1]),
                 cv2.FONT_HERSHEY_SIMPLEX, 0.6, (255, 255, 0), 2)
-    
+
     if end_point:
         cv2.circle(result, end_point, 12, (255, 0, 0), -1)
         cv2.putText(result, "END", (end_point[0] + 15, end_point[1]),
                     cv2.FONT_HERSHEY_SIMPLEX, 0.6, (255, 0, 0), 2)
-    
+
     if start_point:
         cv2.circle(result, start_point, 12, (0, 100, 255), -1)
         cv2.putText(result, "START", (start_point[0] + 15, start_point[1]),
                     cv2.FONT_HERSHEY_SIMPLEX, 0.6, (0, 100, 255), 2)
-    
+
     fig, axes = plt.subplots(1, 3, figsize=(18, 6))
-    
-    axes[0].imshow(img_rgb)
+
+    # axes[0].imshow(img_rgb)
     axes[0].set_title("Original Image")
-    
-    axes[1].imshow(clean_mask, cmap='gray')
+
+    # axes[1].imshow(clean_mask, cmap='gray')
     axes[1].set_title("Cleaned Mask")
-    
-    axes[2].imshow(result)
+
+    # axes[2].imshow(result)
     axes[2].set_title(f"Final Path: {len(full_path)} pixels" if full_path else "Final Path")
-    
+
     for ax in axes:
         ax.axis('off')
-    
-    plt.tight_layout()
-    plt.show()
-    
+
+    # plt.tight_layout()
+    # plt.show()
+
     return {
         'start': start_point,
         'end': end_point,
@@ -414,4 +414,3 @@ ZUMA_SPACE_CONFIG = {
     'min_noise_area': 300,   
     'min_component_area': 150,
 }
-
