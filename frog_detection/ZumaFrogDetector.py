@@ -7,21 +7,16 @@ class ZumaFrogDetector:
         self.w = frame_width
         self.h = frame_height
 
-        # Larger center ROI (safe)
         self.center_roi_ratio = 0.75
 
-        # VERY SAFE HSV range (debug range)
         self.lower_green = np.array([35, 50, 40])
         self.upper_green = np.array([85, 255, 255])
 
-
-
-        # Morphology (small kernel)
         self.kernel = cv2.getStructuringElement(
             cv2.MORPH_ELLIPSE, (5, 5)
         )
 
-    # --------------------------------------------------
+
     def _center_roi(self, frame):
         cx, cy = self.w // 2, self.h // 2
         rw = int(self.w * self.center_roi_ratio)
@@ -34,7 +29,7 @@ class ZumaFrogDetector:
 
         return frame[y1:y2, x1:x2], (x1, y1)
 
-    # --------------------------------------------------
+
     def _green_mask(self, frame):
         hsv = cv2.cvtColor(frame, cv2.COLOR_BGR2HSV)
 
@@ -42,12 +37,11 @@ class ZumaFrogDetector:
             hsv, self.lower_green, self.upper_green
         )
 
-        # Gentle cleanup only
         mask = cv2.morphologyEx(mask, cv2.MORPH_CLOSE, self.kernel)
 
         return mask
 
-    # --------------------------------------------------
+
     def _is_frog_blob(self, cnt, roi_area, roi_shape):
         area = cv2.contourArea(cnt)
         if area < 0.003 * roi_area:
@@ -86,7 +80,6 @@ class ZumaFrogDetector:
         return True
 
 
-    # --------------------------------------------------
     def detect(self, frame, debug=True):
 
         roi, (ox, oy) = self._center_roi(frame)

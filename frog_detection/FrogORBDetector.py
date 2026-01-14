@@ -20,7 +20,7 @@ class FrogORBDetector:
 
         print(f"[ORB] Loaded {len(self.templates)} frog templates")
 
-    # --------------------------------------------------
+
     def _load_templates(self, templates_dir):
         for file in os.listdir(templates_dir):
             if file.lower().endswith((".png", ".jpg", ".jpeg")):
@@ -33,7 +33,7 @@ class FrogORBDetector:
                 if des is not None:
                     self.templates.append((file, kp, des))
 
-    # --------------------------------------------------
+
     def detect(self, frame):
         gray = cv2.cvtColor(frame, cv2.COLOR_BGR2GRAY)
         kp_frame, des_frame = self.orb.detectAndCompute(gray, None)
@@ -50,7 +50,6 @@ class FrogORBDetector:
         for name, kp_t, des_t in self.templates:
             matches = bf.knnMatch(des_t, des_frame, k=2)
 
-            # Lowe ratio test
             good = []
             for m, n in matches:
                 if m.distance < 0.8 * n.distance:
@@ -75,9 +74,6 @@ class FrogORBDetector:
 
             x, y, w, h = cv2.boundingRect(inlier_pts)
 
-            # ---------------------------
-            # فلترة هندسية ذكية
-            # ---------------------------
             area_ratio = (w * h) / (w_frame * h_frame)
             aspect = w / float(h + 1e-5)
 
