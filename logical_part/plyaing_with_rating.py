@@ -430,8 +430,12 @@ if __name__ == "__main__":
     cached_path_points = None
 
     window_name = "Zuma Bot - DEBUG MODE"
-    cv2.namedWindow(window_name, cv2.WINDOW_NORMAL)
-    cv2.resizeWindow(window_name, 700, 500)
+    # ═══════════════════════════════════════════════════════════
+    # تغيير نوع النافذة لتكون بحجم ثابت (لا يمكن تغيير حجمها)
+    # ═══════════════════════════════════════════════════════════
+    cv2.namedWindow(window_name, cv2.WINDOW_AUTOSIZE)
+    # إذا كنت تريد نافذة قابلة لتغيير الحجم، استخدم:
+    # cv2.namedWindow(window_name, cv2.WINDOW_NORMAL)
 
     with mss.mss() as sct:
         full_monitor = sct.monitors[MONITOR]
@@ -526,10 +530,13 @@ if __name__ == "__main__":
                         path_points=cached_path_points,
                     )
 
-                    if cached_path_points:
+                    # ═══════════════════════════════════════════════════════════
+                    # رسم المسار على الصورة (يجب أن يكون قبل أي عرض)
+                    # ═══════════════════════════════════════════════════════════
+                    if cached_path_points and len(cached_path_points) > 0:
                         pts = np.array(cached_path_points, np.int32)
                         pts = pts.reshape((-1, 1, 2))
-                        cv2.polylines(result, [pts], False, (0, 255, 0), 1)
+                        cv2.polylines(result, [pts], False, (0, 255, 0), 2)
 
                     frog_box = frog_detector.detect(frame)
 
