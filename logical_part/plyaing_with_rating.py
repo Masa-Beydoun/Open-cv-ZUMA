@@ -153,6 +153,45 @@ def point_to_line_distance(px, py, x1, y1, x2, y2):
     return num / den
 
 
+def calculate_aim_position(frog_center, target_pos, distance_from_frog=100, ratio=None):
+    """
+    حساب نقطة التصويب على الخط بين الضفدع والكرة
+    
+    Args:
+        frog_center: مركز الضفدع (x, y)
+        target_pos: موقع الكرة المستهدفة (x, y)
+        distance_from_frog: المسافة بالبكسل من الضفدع (افتراضي: 100)
+        ratio: نسبة المسافة من الضفدع (0.0-1.0) - إذا تم تحديده يتجاهل distance_from_frog
+    
+    Returns:
+        (aim_x, aim_y): نقطة التصويب الجديدة
+    """
+    if frog_center is None:
+        return target_pos
+    
+    fx, fy = frog_center
+    tx, ty = target_pos
+    
+    # حساب المسافة الكلية
+    total_distance = math.sqrt((tx - fx)**2 + (ty - fy)**2)
+    
+    if total_distance == 0:
+        return target_pos
+    
+    # إذا تم تحديد نسبة معينة
+    if ratio is not None:
+        ratio = max(0.0, min(1.0, ratio))  # تأكد أن النسبة بين 0 و 1
+    else:
+        # حساب النسبة بناءً على المسافة المطلوبة
+        ratio = min(distance_from_frog / total_distance, 0.95)  # لا تتجاوز 95% من المسافة
+    
+    # حساب النقطة الجديدة
+    aim_x = fx + (tx - fx) * ratio
+    aim_y = fy + (ty - fy) * ratio
+    
+    return (int(aim_x), int(aim_y))
+
+
 def find_best_target(balls, current_ball_color, frog_center=None):
     """
     إيجاد أفضل كرة للتصويب - مع تسجيل مفصل
@@ -274,20 +313,35 @@ def find_best_target(balls, current_ball_color, frog_center=None):
     return best_target, best_score, best_reason
 
 
-def execute_shot(target_pos, game_offset, target_color, score, reason):
+def execute_shot(target_pos, game_offset, target_color, score, reason, frog_center=None):
     """تنفيذ التصويب مع تسجيل مفصل"""
     global shot_counter, shot_history
     
     shot_counter += 1
-    real_target_x = target_pos[0] + game_offset[0]
-    real_target_y = target_pos[1] + game_offset[1]
+    
+    # ═══════════════════════════════════════════════════════════
+    # حساب نقطة التصويب (قريبة من الضفدع، في اتجاه الكرة)
+    # ═══════════════════════════════════════════════════════════
+    if frog_center:
+        # الخيار 1: مسافة ثابتة من الضفدع (100 بكسل)
+        adjusted_target = calculate_aim_position(frog_center, target_pos, distance_from_frog=100)
+        
+        # أو الخيار 2: نسبة من المسافة (30% من المسافة الكلية)
+        # adjusted_target = calculate_aim_position(frog_center, target_pos, ratio=0.3)
+    else:
+        adjusted_target = target_pos
+    
+    # تحويل إلى إحداثيات الشاشة
+    real_target_x = adjusted_target[0] + game_offset[0]
+    real_target_y = adjusted_target[1] + game_offset[1]
     
     # تسجيل الطلقة
     shot_record = {
         "id": shot_counter,
         "time": datetime.now().strftime("%H:%M:%S"),
         "color": target_color,
-        "local_pos": target_pos,
+        "original_target": target_pos,
+        "adjusted_target": adjusted_target,
         "screen_pos": (real_target_x, real_target_y),
         "score": score,
         "reason": reason
@@ -299,18 +353,19 @@ def execute_shot(target_pos, game_offset, target_color, score, reason):
     print(f"  SHOT #{shot_counter}")
     print(f"  Time: {shot_record['time']}")
     print(f"  Target Color: {target_color}")
-    print(f"  Local Position: {target_pos}")
+    print(f"  Original Ball Position: {target_pos}")
+    print(f"  Adjusted Aim Position: {adjusted_target}")
     print(f"  Screen Position: ({real_target_x}, {real_target_y})")
     print(f"  Score: {score:.0f}")
     print(f"  Reason: {reason}")
     print("🎯" * 30 + "\n")
     
-    # تنفيذ التصويب
+    # تنفيذ التصويب على النقطة المعدلة
     pyautogui.moveTo(real_target_x, real_target_y, duration=0)
     time.sleep(0.05)
     pyautogui.click()
     
-    log(f"Shot #{shot_counter} executed!", "SHOT")
+    log(f"Shot #{shot_counter} executed at adjusted position!", "SHOT")
 
 
 def print_shot_history():
@@ -375,8 +430,12 @@ if __name__ == "__main__":
     cached_path_points = None
 
     window_name = "Zuma Bot - DEBUG MODE"
-    cv2.namedWindow(window_name, cv2.WINDOW_NORMAL)
-    cv2.resizeWindow(window_name, 700, 500)
+    # ═══════════════════════════════════════════════════════════
+    # تغيير نوع النافذة لتكون بحجم ثابت (لا يمكن تغيير حجمها)
+    # ═══════════════════════════════════════════════════════════
+    cv2.namedWindow(window_name, cv2.WINDOW_AUTOSIZE)
+    # إذا كنت تريد نافذة قابلة لتغيير الحجم، استخدم:
+    # cv2.namedWindow(window_name, cv2.WINDOW_NORMAL)
 
     with mss.mss() as sct:
         full_monitor = sct.monitors[MONITOR]
@@ -471,10 +530,13 @@ if __name__ == "__main__":
                         path_points=cached_path_points,
                     )
 
-                    if cached_path_points:
+                    # ═══════════════════════════════════════════════════════════
+                    # رسم المسار على الصورة (يجب أن يكون قبل أي عرض)
+                    # ═══════════════════════════════════════════════════════════
+                    if cached_path_points and len(cached_path_points) > 0:
                         pts = np.array(cached_path_points, np.int32)
                         pts = pts.reshape((-1, 1, 2))
-                        cv2.polylines(result, [pts], False, (0, 255, 0), 1)
+                        cv2.polylines(result, [pts], False, (0, 255, 0), 2)
 
                     frog_box = frog_detector.detect(frame)
 
@@ -515,10 +577,20 @@ if __name__ == "__main__":
                                     target_pos = best_target["position"]
                                     game_offset = (game_x, game_y)
                                     
-                                    cv2.line(result, frog_center, target_pos, (0, 255, 255), 3)
-                                    cv2.circle(result, target_pos, 20, (0, 0, 255), 3)
+                                    # إضافة الرسم البصري للتوضيح
+                                    adjusted_aim = calculate_aim_position(frog_center, target_pos, distance_from_frog=100)
                                     
-                                    execute_shot(target_pos, game_offset, best_target["color"], score, reason)
+                                    # رسم الخط الكامل (رمادي خفيف)
+                                    cv2.line(result, frog_center, target_pos, (100, 100, 100), 1)
+                                    
+                                    # رسم نقطة التصويب الفعلية (دائرة خضراء)
+                                    cv2.circle(result, adjusted_aim, 10, (0, 255, 0), 3)
+                                    cv2.line(result, frog_center, adjusted_aim, (0, 255, 255), 3)
+                                    
+                                    # رسم الكرة المستهدفة (دائرة حمراء)
+                                    cv2.circle(result, target_pos, 20, (0, 0, 255), 2)
+                                    
+                                    execute_shot(target_pos, game_offset, best_target["color"], score, reason, frog_center=frog_center)
                                     last_shot_time = current_time
                     
                     # عرض الهدف المحتمل (بدون تصويب)
@@ -526,7 +598,13 @@ if __name__ == "__main__":
                         best_target, score, reason = find_best_target(balls, CURRENT_BALL_COLOR, frog_center)
                         if best_target:
                             target_pos = best_target["position"]
-                            cv2.line(result, frog_center, target_pos, (255, 255, 0), 2)
+                            
+                            # عرض نقطة التصويب المعدلة حتى بدون التصويب
+                            adjusted_aim = calculate_aim_position(frog_center, target_pos, distance_from_frog=100)
+                            
+                            cv2.line(result, frog_center, target_pos, (100, 100, 100), 1)
+                            cv2.line(result, frog_center, adjusted_aim, (255, 255, 0), 2)
+                            cv2.circle(result, adjusted_aim, 8, (255, 255, 0), 2)
                             cv2.circle(result, target_pos, 15, (255, 0, 255), 2)
 
                     # معلومات العرض
