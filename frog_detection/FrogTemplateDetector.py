@@ -20,7 +20,7 @@ class FrogTemplateDetector:
 
         print(f"[TEMPLATE] Loaded {len(self.templates)} frog templates")
 
-    # --------------------------------------------------
+
     def detect(self, frame):
         gray = cv2.cvtColor(frame, cv2.COLOR_BGR2GRAY)
         h_frame, w_frame = gray.shape[:2]
@@ -28,7 +28,6 @@ class FrogTemplateDetector:
         best_score = 0
         best_box = None
 
-        # Multi-scale search
         scales = np.linspace(0.5, 1.8, 14)
 
         for template in self.templates:

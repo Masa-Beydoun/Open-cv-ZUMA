@@ -17,9 +17,6 @@ except ImportError:
     from FrogTemplateDetector import FrogTemplateDetector
 
 
-# ==================================================
-# MAIN
-# ==================================================
 if __name__ == "__main__":
 
     window_name = "Zuma Frog Detector - Template"
@@ -47,9 +44,6 @@ if __name__ == "__main__":
         while True:
             loop_start = time.time()
 
-            # ---------------------------------------------
-            # إعادة اكتشاف منطقة اللعبة دوريًا
-            # ---------------------------------------------
             if loop_start - last_recheck_time > RECHECK_INTERVAL:
                 screenshot = np.array(sct.grab(full_monitor))
                 screenshot = cv2.cvtColor(screenshot, cv2.COLOR_BGRA2BGR)
@@ -63,18 +57,12 @@ if __name__ == "__main__":
 
                 last_recheck_time = loop_start
 
-            # ---------------------------------------------
-            # التقاط فريم اللعبة
-            # ---------------------------------------------
             if capture_area:
                 try:
                     sct_img = sct.grab(capture_area)
                     frame = np.array(sct_img)
                     frame = cv2.cvtColor(frame, cv2.COLOR_BGRA2BGR)
 
-                    # -----------------------------------------
-                    # كشف الضفدع
-                    # -----------------------------------------
                     frog_box, score = frog_detector.detect(frame)
 
                     if frog_box:
@@ -84,7 +72,7 @@ if __name__ == "__main__":
                             frame,
                             (x, y),
                             (x + w, y + h),
-                            (0, 255, 0),
+                            (0, 0, 0),
                             2
                         )
 
@@ -94,13 +82,10 @@ if __name__ == "__main__":
                             (x, y - 8),
                             cv2.FONT_HERSHEY_SIMPLEX,
                             0.6,
-                            (0, 255, 0),
+                            (0, 0, 0),
                             2
                         )
 
-                    # -----------------------------------------
-                    # حساب FPS
-                    # -----------------------------------------
                     frame_count += 1
                     elapsed = time.time() - start_time
                     if elapsed >= 1.0:

@@ -24,7 +24,7 @@ class FrogSmartTemplateDetector:
 
         print(f"[SMART] Loaded {len(self.templates)} frog templates")
 
-    # -----------------------------------------
+
     def _load_templates(self, templates_dir):
         for file in sorted(os.listdir(templates_dir)):
             if file.lower().endswith((".png", ".jpg", ".jpeg")):
@@ -36,7 +36,7 @@ class FrogSmartTemplateDetector:
                 edges = cv2.Canny(img, 80, 160)
                 self.templates.append((file, edges))
 
-    # -----------------------------------------
+    
     def detect(self, frame):
         gray = cv2.cvtColor(frame, cv2.COLOR_BGR2GRAY)
         edges = cv2.Canny(gray, 80, 160)
@@ -65,7 +65,6 @@ class FrogSmartTemplateDetector:
                     x, y = max_loc
                     area_ratio = (rw * rh) / (w_frame * h_frame)
 
-                    # فلترة هندسية بسيطة
                     if 0.02 < area_ratio < 0.25:
                         best_score = max_val
                         best_match = (x, y, rw, rh)
