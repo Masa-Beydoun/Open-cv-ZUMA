@@ -7,24 +7,22 @@ import mss
 try:
     from constants import *
     from roi.detect_roi import analyze_game_screen
+    from frog_detection.FrogTemplateDetector import FrogTemplateDetector
 except ImportError:
     import sys, os
-
     sys.path.append(os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
-    from roi.detect_roi import analyze_game_screen
+
     from constants import *
+    from roi.detect_roi import analyze_game_screen
+    from FrogTemplateDetector import FrogTemplateDetector
 
-    from frog_detection.ZumaFrogDetector import ZumaFrogDetector
 
-
+# ==================================================
+# MAIN
+# ==================================================
 if __name__ == "__main__":
 
-    IS_REALTIME = True
-
-    # ===============================
-    # نافذة العرض
-    # ===============================
-    window_name = "Zuma Frog Detector - Live"
+    window_name = "Zuma Frog Detector - Template"
     cv2.namedWindow(window_name, cv2.WINDOW_NORMAL)
     cv2.resizeWindow(window_name, 600, 450)
 
@@ -33,22 +31,25 @@ if __name__ == "__main__":
 
         capture_area = None
         last_recheck_time = 0
-        RECHECK_INTERVAL = 2
+        RECHECK_INTERVAL = 2  # seconds
 
         fps = 0
         frame_count = 0
         start_time = time.time()
 
-        frog_detector = None
+        frog_detector = FrogTemplateDetector(
+            templates_dir="frog_detection/templates",
+            threshold=0.62
+        )
 
-        print("Starting Main Loop...")
+        print("[MAIN] Starting main loop...")
 
         while True:
             loop_start = time.time()
 
-            # -------------------------------
-            # البحث عن منطقة اللعبة دورياً
-            # -------------------------------
+            # ---------------------------------------------
+            # إعادة اكتشاف منطقة اللعبة دوريًا
+            # ---------------------------------------------
             if loop_start - last_recheck_time > RECHECK_INTERVAL:
                 screenshot = np.array(sct.grab(full_monitor))
                 screenshot = cv2.cvtColor(screenshot, cv2.COLOR_BGRA2BGR)
@@ -59,49 +60,50 @@ if __name__ == "__main__":
                         full_monitor["left"],
                         full_monitor["top"]
                     )
+
                 last_recheck_time = loop_start
 
-            # -------------------------------
-            # التقاط الفريم
-            # -------------------------------
+            # ---------------------------------------------
+            # التقاط فريم اللعبة
+            # ---------------------------------------------
             if capture_area:
                 try:
                     sct_img = sct.grab(capture_area)
                     frame = np.array(sct_img)
                     frame = cv2.cvtColor(frame, cv2.COLOR_BGRA2BGR)
 
-                    # إنشاء الكاشف مرة واحدة فقط
-                    if frog_detector is None:
-                        h, w = frame.shape[:2]
-                        frog_detector = ZumaFrogDetector(w, h)
-
+                    # -----------------------------------------
                     # كشف الضفدع
-                    frog_box = frog_detector.detect(frame)
+                    # -----------------------------------------
+                    frog_box, score = frog_detector.detect(frame)
 
-                    # رسم الضفدع
                     if frog_box:
-                        x, y, fw, fh = frog_box
+                        x, y, w, h = frog_box
+
                         cv2.rectangle(
                             frame,
                             (x, y),
-                            (x + fw, y + fh),
-                            (0, 255, 0),
-                            2
-                        )
-                        cv2.putText(
-                            frame,
-                            "FROG",
-                            (x, y - 5),
-                            cv2.FONT_HERSHEY_SIMPLEX,
-                            0.5,
+                            (x + w, y + h),
                             (0, 255, 0),
                             2
                         )
 
+                        cv2.putText(
+                            frame,
+                            f"FROG {score:.2f}",
+                            (x, y - 8),
+                            cv2.FONT_HERSHEY_SIMPLEX,
+                            0.6,
+                            (0, 255, 0),
+                            2
+                        )
+
+                    # -----------------------------------------
                     # حساب FPS
+                    # -----------------------------------------
                     frame_count += 1
                     elapsed = time.time() - start_time
-                    if elapsed > 1.0:
+                    if elapsed >= 1.0:
                         fps = frame_count / elapsed
                         frame_count = 0
                         start_time = time.time()
@@ -119,16 +121,16 @@ if __name__ == "__main__":
                     cv2.imshow(window_name, frame)
 
                 except Exception as e:
-                    print(f"Error: {e}")
+                    print(f"[ERROR] {e}")
 
             else:
                 blank = np.zeros((300, 500, 3), dtype=np.uint8)
                 cv2.putText(
                     blank,
-                    "Searching...",
-                    (50, 150),
+                    "Searching for game region...",
+                    (20, 150),
                     cv2.FONT_HERSHEY_SIMPLEX,
-                    1,
+                    0.9,
                     (0, 255, 255),
                     2
                 )
