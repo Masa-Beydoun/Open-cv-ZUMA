@@ -110,36 +110,73 @@ class ZumaBot:
 
     def identify_color(self, roi):
         hsv_roi = cv2.cvtColor(roi, cv2.COLOR_BGR2HSV)
+        h, w = roi.shape[:2]
 
         # ---------------------------------------------------------
-        # >>> هنا يتم الفحص الثاني <<<
+        # 1. إنشاء قناع دائري (مهم جداً لإهمال زوايا المربع الخلفية)
+        # ---------------------------------------------------------
+        mask = np.zeros((h, w), dtype=np.uint8)
+        # نصف القطر -1 لضمان عدم لمس الحواف
+        cv2.circle(mask, (w // 2, h // 2), int(w / 2) - 1, 255, -1)
+
+        current_hue = 0
+        current_sat = 0
+
+        # ---------------------------------------------------------
+        # 2. استخراج الهيو (H) والتشبع (S)
         # ---------------------------------------------------------
         if self.extract_color_method == ExtractColorMethod.DOMINANT:
-            # في حالة الطاغي، نفضل إنشاء قناع دائري بسيط لإهمال زوايا المربع
-            h, w = roi.shape[:2]
-            mask = np.zeros((h, w), dtype=np.uint8)
-            cv2.circle(mask, (w // 2, h // 2), int(w / 2), 255, -1)
-
-            hue, _ = self.get_dominant_color_features(hsv_roi, mask)
+            # ملاحظة: تأكد أن دالة get_dominant_color_features
+            # في كودك تعيد (hue, saturation) وليس hue فقط
+            try:
+                current_hue, current_sat = self.get_dominant_color_features(
+                    hsv_roi, mask
+                )
+            except ValueError:
+                # Fallback في حال كانت الدالة تعيد قيمة واحدة
+                current_hue = self.get_dominant_color_features(hsv_roi, mask)[0]
+                # نأخذ التشبع بالمتوسط كاحتياط
+                current_sat = cv2.mean(hsv_roi, mask=mask)[1]
         else:
-            # الطريقة القديمة
-            mean_hsv = cv2.mean(hsv_roi)
-            hue = mean_hsv[0]
+            # الطريقة الأسرع: المتوسط الحسابي داخل القناع الدائري
+            mean_val = cv2.mean(hsv_roi, mask=mask)
+            current_hue = mean_val[0]
+            current_sat = mean_val[1]  # <--- استخراج التشبع هنا
 
-        # مقارنة اللون المكتشف مع الألوان المحفوظة
+        # ---------------------------------------------------------
+        # 3. المقارنة الموزونة (Weighted Matching)
+        # ---------------------------------------------------------
         best_match = None
-        min_diff = 999
+        min_error = 9999
+
+        # أوزان الأهمية (نفس منطق الضفدع)
+        W_HUE = 1.0  # اللون هو الأساس
+        W_SAT = 0.5  # التشبع يساعد في الفصل (مثل الأزرق vs البنفسجي)
 
         for color_name, (known_hue, known_sat) in self.hue_sat.items():
-            diff = abs(hue - known_hue)
-            if diff > 90:
-                diff = 180 - diff
-            if diff < min_diff:
-                min_diff = diff
+            # حساب فرق اللون (مع مراعاة الدائرة 180)
+            diff_h = abs(current_hue - known_hue)
+            if diff_h > 90:
+                diff_h = 180 - diff_h
+
+            # حساب فرق التشبع
+            diff_s = abs(current_sat - known_sat)
+
+            # معادلة الخطأ الموزون
+            total_error = (diff_h * W_HUE) + (diff_s * W_SAT)
+
+            if total_error < min_error:
+                min_error = total_error
                 best_match = color_name
 
-        if min_diff > 20:
+        # ---------------------------------------------------------
+        # 4. فلتر العتبة (Threshold)
+        # ---------------------------------------------------------
+        # زدنا القيمة قليلاً لأننا نجمع خطأين الآن (H + S)
+        # القيمة 25 أو 30 جيدة، عدلها حسب دقة ألوانك المحفوظة
+        if min_error > 25:
             return None
+
         return best_match
 
     def get_adaptive_params(self, current_width):
@@ -305,33 +342,15 @@ class ZumaBot:
             rank_text = f"#{rank + 1}"
             cv2.putText(
                 output,
-                rank_text,
+                ball["color"],
                 (x - 10, y + 5),
                 cv2.FONT_HERSHEY_SIMPLEX,
                 0.6,
                 (0, 0, 0),
                 4,
             )
-            cv2.putText(
-                output,
-                rank_text,
-                (x - 10, y + 5),
-                cv2.FONT_HERSHEY_SIMPLEX,
-                0.6,
-                (0, 255, 255),
-                2,
-            )
 
             # كتابة المسافة
-            cv2.putText(
-                output,
-                f"{dist}",
-                (x - 10, y + r + 15),
-                cv2.FONT_HERSHEY_SIMPLEX,
-                0.4,
-                (200, 200, 255),
-                1,
-            )
 
         # نعيد الصورة + القائمة المرتبة
         return output, detected_balls
@@ -534,14 +553,14 @@ if __name__ == "__main__":
                             frame,
                             ignored_zones=ignored_zones,
                             # path_mask=cached_path_mask,  # تمرير القناع
-                            path_points=cached_path_points,  # تمرير النقاط
+                            # path_points=cached_path_points,  # تمرير النقاط
                         )
 
                         if cached_path_points:
                             # رسم خط بسيط يمثل المسار
                             pts = np.array(cached_path_points, np.int32)
                             pts = pts.reshape((-1, 1, 2))
-                            cv2.polylines(result, [pts], False, (0, 255, 0), 1)
+                            cv2.polylines(result, [pts], False, (0, 0, 0), 2)
 
                         # حساب الـ FPS
                         frame_count += 1

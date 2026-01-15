@@ -19,35 +19,35 @@ try:
 except Exception:
     ctypes.windll.user32.SetProcessDPIAware()
 
-# try:
-#     from frog_detection.FrogTemplateDetector import FrogTemplateDetector
-#     from roi.detect_roi import analyze_game_screen
-#     from balls_detection.ignored_zone_manager import IgnoredZonesManager
-#     from balls_detection.detect_balls import ZumaBot
-#     from frog_detection.ZumaFrogDetector import ZumaFrogDetector
-#     from path_detection.capture_game_path import capture_game_path
-#     from path_detection.path_detection import (
-#         ZUMA_GREEN_JUNGLE_CONFIG,
-#         ZUMA_SPACE_CONFIG,
-#         ZUMA_DELUXE_CONFIG,
-#     )
-#     from constants import *
-# except ImportError:
-import sys, os
+try:
+    from frog_detection.FrogTemplateDetector import FrogTemplateDetector
+    from roi.detect_roi import analyze_game_screen
+    from balls_detection.ignored_zone_manager import IgnoredZonesManager
+    from balls_detection.detect_balls import ZumaBot
+    from frog_detection.ZumaFrogDetector import ZumaFrogDetector
+    from path_detection.capture_game_path import capture_game_path
+    from path_detection.path_detection import (
+        ZUMA_GREEN_JUNGLE_CONFIG,
+        ZUMA_SPACE_CONFIG,
+        ZUMA_DELUXE_CONFIG,
+    )
+    from constants import *
+except ImportError:
+    import sys, os
 
-sys.path.append(os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
-from frog_detection.FrogTemplateDetector import FrogTemplateDetector
-from roi.detect_roi import analyze_game_screen
-from balls_detection.ignored_zone_manager import IgnoredZonesManager
-from balls_detection.detect_balls import ZumaBot
-from frog_detection.ZumaFrogDetector import ZumaFrogDetector
-from path_detection.capture_game_path import capture_game_path
-from path_detection.path_detection import (
-    ZUMA_GREEN_JUNGLE_CONFIG,
-    ZUMA_SPACE_CONFIG,
-    ZUMA_DELUXE_CONFIG,
-)
-from constants import *
+    sys.path.append(os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
+    from frog_detection.FrogTemplateDetector import FrogTemplateDetector
+    from roi.detect_roi import analyze_game_screen
+    from balls_detection.ignored_zone_manager import IgnoredZonesManager
+    from balls_detection.detect_balls import ZumaBot
+    from frog_detection.ZumaFrogDetector import ZumaFrogDetector
+    from path_detection.capture_game_path import capture_game_path
+    from path_detection.path_detection import (
+        ZUMA_GREEN_JUNGLE_CONFIG,
+        ZUMA_SPACE_CONFIG,
+        ZUMA_DELUXE_CONFIG,
+    )
+    from constants import *
 
 pyautogui.PAUSE = 0
 pyautogui.FAILSAFE = True
@@ -62,7 +62,9 @@ shot_counter = 0
 shot_history = []
 
 FORBIDDEN_WIDTH = 340
-FORBIDDEN_HEIGHT = 110
+FORBIDDEN_HEIGHT = 90
+BALL_OFFSET_FACTOR = 0.552
+SAMPLE_RADIUS_RATIO = 0.03
 
 OCCLUSION_SAFETY_MARGIN = 1.3
 TRACKING_MAX_DISTANCE = 30
@@ -152,284 +154,17 @@ class BallTracker:
 # ============================================================
 #     كشف اللون الديناميكي
 # ============================================================
+def active_color_check(sct, monitor, initial_frog_box, game_offset, color_config):
+    # دالة داخلية لحساب الهيو المسيطر (أدق من المتوسط العادي)
+    def get_dominant_hue(hsv_img, mask):
+        # حساب الهستوجرام لقناة الـ Hue فقط داخل القناع
+        # الرينج 180 لأن OpenCV Hue من 0-179
+        hist = cv2.calcHist([hsv_img], [0], mask, [180], [0, 180])
 
+        # البحث عن القيمة الأكثر تكراراً (القمة)
+        dominant_hue = np.argmax(hist)
+        return dominant_hue
 
-# def active_monkey_check(
-#     sct, monitor, monkey_box, game_offset, color_config, allow_movement=False
-# ):
-#     gx, gy = game_offset
-#     mx, my, mw, mh = monkey_box
-
-#     # مركز القرد
-#     cx = mx + mw // 2
-#     cy = my + mh // 2
-
-#     # 1. إعداد حركة الماوس (للأعلى تماماً لإجبار القرد على النظر للكرة)
-#     target_mouse_x = gx + cx
-#     # نرفع الماوس مسافة كافية فوق القرد
-#     target_mouse_y = max(gy, (gy + cy) - 200)
-
-#     # التأكد من حدود الشاشة
-#     target_mouse_x = max(0, min(target_mouse_x, monitor["width"] - 1))
-#     target_mouse_y = max(0, min(target_mouse_y, monitor["height"] - 1))
-
-#     if allow_movement:
-#         # حركة فورية وسريعة
-#         pyautogui.moveTo(target_mouse_x, target_mouse_y, duration=0.0)
-#         time.sleep(0.08)  # انتظار قصير جداً للدوران
-
-#     # 2. تحديد منطقة الفحص
-#     # ============================================================
-#     # 🟢 ضــــع القيم التي حصلت عليها من الـ TUNER هنا
-#     # ============================================================
-#     OFFSET_FACTOR = 0.32  # مثال: المسافة عن المركز
-#     SAMPLE_RADIUS = 7  # مثال: نصف قطر الدائرة (صغير لتجنب الخلفية)
-#     # ============================================================
-
-#     pixel_offset = int(mw * OFFSET_FACTOR)
-
-#     # إحداثيات الكرة المتوقعة (فوق الرأس)
-#     ball_gx = int(gx + cx)
-#     ball_gy = int((gy + cy) - pixel_offset)
-
-#     # منطقة الالتقاط (مربع يحيط بدائرة الفحص)
-#     region = {
-#         "top": ball_gy - SAMPLE_RADIUS,
-#         "left": ball_gx - SAMPLE_RADIUS,
-#         "width": SAMPLE_RADIUS * 2,
-#         "height": SAMPLE_RADIUS * 2,
-#     }
-
-#     try:
-#         img = np.array(sct.grab(region))
-#         # mss يعيد BGRA، نحوله إلى HSV
-#         frame = cv2.cvtColor(img, cv2.COLOR_BGRA2BGR)
-#         hsv = cv2.cvtColor(frame, cv2.COLOR_BGR2HSV)
-
-#         # ---------------------------------------------------------
-#         # تطبيق نفس منطق identify_color الخاص بك
-#         # ---------------------------------------------------------
-#         h, w = frame.shape[:2]
-
-#         # 1. إنشاء قناع دائري (لعزل الزوايا)
-#         mask = np.zeros((h, w), dtype=np.uint8)
-#         cv2.circle(mask, (w // 2, h // 2), SAMPLE_RADIUS - 1, 255, -1)
-
-#         # 2. استخراج المتوسط
-#         mean_val = cv2.mean(hsv, mask=mask)
-#         current_hue = mean_val[0]
-#         current_sat = mean_val[1]
-
-#         # # فلتر أمان إضافي للقرد (لعزل الجلد البني الباهت)
-#         # if current_sat < 50:
-#         #     return None, (ball_gx, ball_gy), SAMPLE_RADIUS
-
-#         # 3. المقارنة الموزونة (Weighted Matching)
-#         best_match = None
-#         min_error = 9999
-
-#         W_HUE = 1.0
-#         W_SAT = 0.5
-
-#         for color_name, (known_hue, known_sat) in color_config.items():
-#             # فرق الهيو
-#             diff_h = abs(current_hue - known_hue)
-#             if diff_h > 90:
-#                 diff_h = 180 - diff_h
-
-#             # فرق التشبع
-#             diff_s = abs(current_sat - known_sat)
-
-#             # الخطأ الكلي
-#             total_error = (diff_h * W_HUE) + (diff_s * W_SAT)
-
-#             if total_error < min_error:
-#                 min_error = total_error
-#                 best_match = color_name
-
-#         # 4. العتبة (Threshold)
-#         # نفس القيمة التي تستخدمها في كود المسار
-#         if min_error > 25:
-#             return None, (ball_gx, ball_gy), SAMPLE_RADIUS
-
-#         return best_match, (ball_gx, ball_gy), SAMPLE_RADIUS
-
-#     except Exception as e:
-#         log(f"Active Monkey Error: {e}", "ERROR")
-#         return None, None, None
-
-
-def active_monkey_check(
-    sct, monitor, monkey_box, game_offset, color_config, allow_movement=False
-):
-    gx, gy = game_offset
-    mx, my, mw, mh = monkey_box
-
-    # مركز القرد
-    cx = mx + mw // 2
-    cy = my + mh // 2
-
-    # 1. الحركة النشطة (للأعلى)
-    target_mouse_x = gx + cx
-    target_mouse_y = max(gy, (gy + cy) - 200)
-
-    target_mouse_x = max(0, min(target_mouse_x, monitor["width"] - 1))
-    target_mouse_y = max(0, min(target_mouse_y, monitor["height"] - 1))
-
-    if allow_movement:
-        pyautogui.moveTo(target_mouse_x, target_mouse_y, duration=0.04)
-        time.sleep(0.15)  # وقت استجابة للدوران
-
-    # 2. تحديد منطقة البحث (ROI) للـ Hough
-    # نبحث في منطقة فوق مركز القرد
-    # العرض = عرض القرد، الارتفاع = يمتد للأعلى
-    roi_w = int(mw * 0.9)
-    roi_h = int(mh * 0.9)
-
-    # نرفع المنطقة للأعلى لتشمل الكرة المرفوعة
-    roi_top = int((gy + cy) - roi_h * 0.9)
-    roi_left = int((gx + cx) - roi_w // 2)
-
-    # التأكد من الحدود
-    roi_top = max(0, roi_top)
-    roi_left = max(0, roi_left)
-
-    region = {
-        "top": roi_top,
-        "left": roi_left,
-        "width": roi_w,
-        "height": roi_h,
-    }
-
-    try:
-        img = np.array(sct.grab(region))
-        frame_bgr = cv2.cvtColor(img, cv2.COLOR_BGRA2BGR)
-        frame_hsv = cv2.cvtColor(frame_bgr, cv2.COLOR_BGR2HSV)
-
-        # تحضير الصورة لـ Hough
-        gray = cv2.cvtColor(frame_bgr, cv2.COLOR_BGR2GRAY)
-        # تمويه خفيف جداً لإزالة خشونة الحواف
-        gray = cv2.GaussianBlur(gray, (5, 5), 0)
-
-        # ============================================================
-        # 🟢 إعـــدادات HOUGH (للكرة الواحدة)
-        # ============================================================
-        circles = cv2.HoughCircles(
-            gray,
-            cv2.HOUGH_GRADIENT,
-            dp=1,
-            minDist=20,
-            param1=50,
-            param2=30,  # حساسية متوسطة (خفضها إذا لم يجد الكرة)
-            minRadius=12,  # نصف قطر صغير
-            maxRadius=19,  # نصف قطر معقول لكرة زوما
-        )
-
-        detected_ball_color = None
-        # إحداثيات افتراضية للرسم في حال الفشل
-        debug_pt = (roi_left + roi_w // 2, roi_top + roi_h // 2)
-        debug_rad = 10
-
-        if circles is not None:
-            circles = np.uint16(np.around(circles))
-
-            # نفترض أن الكرة هي الدائرة "الأعلى" في المنطقة (أصغر Y)
-            # أو الأقرب لمنتصف الـ X
-            best_circle = None
-            min_y = 9999
-
-            roi_center_x = roi_w // 2
-
-            for i in circles[0, :]:
-                c_x, c_y, c_r = i[0], i[1], i[2]
-
-                # شرط: يجب أن تكون الدائرة قريبة من محور الوسط عمودياً
-                # (لأن القرد ينظر للأعلى، الكرة يجب أن تكون في المنتصف أفقياً)
-                # if abs(c_x - roi_center_x) < (roi_w * 0.3):
-                # نفضل الدائرة الموجودة في النصف العلوي من الـ ROI (بعيدة عن رأس القرد)
-                if c_y < min_y:
-                    min_y = c_y
-                    best_circle = (c_x, c_y, c_r)
-
-            if best_circle:
-                bx, by, br = best_circle
-
-                # 3. تحليل اللون داخل الدائرة المكتشفة
-                # نصنع قناعاً للدائرة (أصغر قليلاً لتجنب الحواف)
-                mask = np.zeros((roi_h, roi_w), dtype=np.uint8)
-                sample_r = max(1, int(br * 0.7))
-                cv2.circle(mask, (bx, by), sample_r, 255, -1)
-
-                # استخدام دالة المطابقة الموجودة لديك
-                # (تأكد أن دالة _match_hsv موجودة في ملفك)
-                mean_val = cv2.mean(frame_hsv, mask=mask)
-                h_val, s_val = mean_val[0], mean_val[1]
-
-                detected_ball_color = _match_hsv(h_val, s_val, color_config, min_sat=50)
-
-                # تحديث إحداثيات الرسم العالمية (Global)
-                debug_pt = (roi_left + bx, roi_top + by)
-                debug_rad = br
-
-        return detected_ball_color, debug_pt, debug_rad
-
-    except Exception as e:
-        log(f"=================Active Hough Error: {e}", "ERROR")
-        return None, None, None
-
-
-def _match_hsv(h, s, color_config, min_sat=50):
-    """
-    مقارنة قيم HSV مع قاموس الألوان باستخدام المنطق الموزون.
-    """
-    # 1. فلتر التشبع الأولي (لعزل الخلفية الباهتة مثل العشب أو جلد القرد)
-    # القيمة الافتراضية 50 جيدة، ويمكن تمرير قيمة أعلى من الـ Tuner إذا لزم الأمر
-    if s < min_sat:
-        print("0" * 40)
-
-        return None
-
-    best_match = None
-    min_error = 9999
-
-    # 2. الأوزان (مطابقة لدالة تتبع المسار identify_color)
-    W_HUE = 1.0
-    W_SAT = 0.5
-
-    for color_name, (known_hue, known_sat) in color_config.items():
-        # حساب فرق الهيو (مع مراعاة الالتفاف حول 180)
-        diff_h = abs(h - known_hue)
-        if diff_h > 90:
-            diff_h = 180 - diff_h
-
-        # حساب فرق التشبع
-        diff_s = abs(s - known_sat)
-
-        # المعادلة الموزونة
-        total_error = (diff_h * W_HUE) + (diff_s * W_SAT)
-
-        if total_error < min_error:
-            min_error = total_error
-            best_match = color_name
-
-    # 3. فلتر العتبة (Threshold) - نفس القيمة المستخدمة في كودك
-    if min_error > 25:
-        print("1" * 40)
-        return None
-
-    return best_match
-
-
-def active_frog_check(
-    sct,
-    monitor,
-    initial_frog_box,
-    game_offset,
-    color_config,
-    allow_movement=False,
-    BALL_OFFSET_FACTOR=0.552,
-    SAMPLE_RADIUS_RATIO=0.03,
-):
     gx, gy = game_offset
     fx, fy, fw, fh = initial_frog_box
     cx = fx + fw // 2
@@ -442,10 +177,9 @@ def active_frog_check(
     target_mouse_x = max(0, min(target_mouse_x, monitor["width"] - 1))
     target_mouse_y = max(0, min(target_mouse_y, monitor["height"] - 1))
 
-    if allow_movement:
-        # تحريك الماوس لكشف اللون (إجراء ضروري في كودك)
-        pyautogui.moveTo(target_mouse_x, target_mouse_y, duration=0.1)
-        time.sleep(0.15)
+    # تحريك الماوس لكشف اللون (إجراء ضروري في كودك)
+    pyautogui.moveTo(target_mouse_x, target_mouse_y, duration=0.1)
+    time.sleep(0.15)
 
     search_margin = 80
     search_x = max(0, int(fx - search_margin))
@@ -892,11 +626,7 @@ def print_shot_history():
 if __name__ == "__main__":
 
     SELECTED_CONFIG = Beach
-
-    if SELECTED_CONFIG == Beach:
-        PATH_CONFIG = ZUMA_GREEN_JUNGLE_CONFIG
-    else:
-        PATH_CONFIG = ZUMA_DELUXE_CONFIG
+    PATH_CONFIG = ZUMA_GREEN_JUNGLE_CONFIG
 
     CURRENT_BALL_COLOR = None
     AUTO_SHOOT = False
@@ -1077,14 +807,14 @@ if __name__ == "__main__":
                     frame = np.array(sct_img)
                     frame = cv2.cvtColor(frame, cv2.COLOR_BGRA2BGR)
 
-                    h, w = frame.shape[:2]
-
                     if frog_detector is None:
                         h, w = frame.shape[:2]
                         if SELECTED_CONFIG == Deluxe3:
                             frog_detector = ZumaFrogDetector(w, h)
                         elif SELECTED_CONFIG == Beach:
-                            frog_detector = FrogTemplateDetector()
+                            SELECTED_CONFIG = FrogTemplateDetector(
+                                templates_dir="frog_detection/templates", threshold=0.62
+                            )
 
                     result, detected_balls = bot.detect_from_frame(
                         frame,
@@ -1099,17 +829,7 @@ if __name__ == "__main__":
                         pts = pts.reshape((-1, 1, 2))
                         cv2.polylines(result, [pts], False, (0, 0, 0), 2)
 
-                    raw_detection = frog_detector.detect(frame)
-
-                    # التحقق مما إذا كان الكاشف يعيد (box, score) أو (box) فقط
-                    if (
-                        isinstance(raw_detection, tuple)
-                        and len(raw_detection) == 2
-                        and isinstance(raw_detection[0], (tuple, list))
-                    ):
-                        frog_box, _ = raw_detection  # وضع القرد (Temlpate)
-                    else:
-                        frog_box = raw_detection  # وضع الضفدع (Color)
+                    frog_box = frog_detector.detect(frame)
 
                     if frog_box:
                         x, y, fw, fh = frog_box
@@ -1119,65 +839,21 @@ if __name__ == "__main__":
                     else:
                         frog_center = None
 
-                    # --- تصحيح: توحيد متغير اللون المكتشف ---
-                    detected_color = None  # توحيد الاسم
-                    next_ball_temp = None
+                    if CURRENT_BALL_COLOR is None and frog_center:
+                        detected_color, sample_pt, sample_rad = active_color_check(
+                            sct,
+                            full_monitor,
+                            frog_box,
+                            (game_x, game_y),
+                            SELECTED_CONFIG["hue_sat"],
+                        )
 
-                    if frog_box:
-                        x, y, fw, fh = frog_box
-                        frog_center = (x + fw // 2, y + fh // 2)
+                        if sample_pt is not None:
+                            last_sample_info = (sample_pt, sample_rad)
 
-                        # رسم مكان اللاعب
-                        cv2.rectangle(result, (x, y), (x + fw, y + fh), (0, 255, 0), 2)
-                        cv2.circle(result, frog_center, 5, (0, 0, 255), -1)
-
-                        # ============================================================
-                        # 🧠 منطق الفحص (Check & Lock Logic)
-                        # ============================================================
-
-                        # الشرط الأساسي: نفحص فقط إذا لم يكن لدينا لون حالي
-                        if CURRENT_BALL_COLOR is None:
-
-                            detected_new = None
-                            sample_pt = None
-
-                            if SELECTED_CONFIG == Beach:
-                                # القرد: يفحص النقطة العلوية
-                                detected_new, sample_pt, s_rad = active_monkey_check(
-                                    sct,
-                                    full_monitor,
-                                    frog_box,
-                                    (game_x, game_y),
-                                    SELECTED_CONFIG["hue_sat"],
-                                    allow_movement=AUTO_SHOOT,
-                                )
-                            else:
-                                # الضفدع: يفحص النقطة العلوية (نفس المنطق)
-                                detected_new, sample_pt, s_rad = active_frog_check(
-                                    sct,
-                                    full_monitor,
-                                    frog_box,
-                                    (game_x, game_y),
-                                    SELECTED_CONFIG["hue_sat"],
-                                    allow_movement=AUTO_SHOOT,
-                                )
-
-                            # إذا وجدنا لوناً، نثبته (Lock)
-                            if detected_new:
-                                CURRENT_BALL_COLOR = detected_new
-                                # log(f"Locked Color: {detected_new}", "SUCCESS")
-
-                            # تحديث مكان الرسم فقط لحظة الفحص
-                            if sample_pt:
-                                last_sample_info = (sample_pt, s_rad)
-
-                    else:
-                        frog_center = None
-
-                    # تحديث اللون العام
-                    if detected_color:
-                        CURRENT_BALL_COLOR = detected_color
-                        log(f"Color: {detected_color}", "SUCCESS")
+                        if detected_color:
+                            CURRENT_BALL_COLOR = detected_color
+                            log(f"Color: {detected_color}", "SUCCESS")
 
                     if AUTO_SHOOT and CURRENT_BALL_COLOR:
                         current_time = time.time()
@@ -1193,7 +869,10 @@ if __name__ == "__main__":
                                     score, CURRENT_BALL_COLOR, detected_balls
                                 ):
                                     dump_zone = find_dump_zone(
-                                        stable_balls, frog_center, w, h
+                                        stable_balls,
+                                        frog_center,
+                                        frog_detector.w,
+                                        frog_detector.h,
                                     )
 
                                     if dump_zone:
@@ -1273,17 +952,6 @@ if __name__ == "__main__":
                         2,
                     )
 
-                    if next_ball_temp:
-                        cv2.putText(
-                            result,
-                            f"Next: {next_ball_temp}",
-                            (x, y - 10),
-                            cv2.FONT_HERSHEY_SIMPLEX,
-                            0.5,
-                            (200, 200, 200),
-                            1,
-                        )
-
                     cv2.putText(
                         result,
                         f"Frog: {CURRENT_BALL_COLOR}",
@@ -1344,8 +1012,7 @@ if __name__ == "__main__":
                     cv2.imshow(window_name, result)
 
                 except Exception as e:
-                    log(f"Error===========: {e}", "ERROR")
-
+                    log(f"Error: {e}", "ERROR")
             else:
                 blank_screen = np.zeros((300, 500, 3), dtype=np.uint8)
                 cv2.putText(

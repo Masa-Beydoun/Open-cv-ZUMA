@@ -1,59 +1,62 @@
 import cv2
-import os
 import numpy as np
 
 
 class FrogTemplateDetector:
-    def __init__(self, templates_dir, threshold=0.6):
-        self.templates = []
-        self.threshold = threshold
 
-        for file in os.listdir(templates_dir):
-            if file.lower().endswith((".png", ".jpg", ".jpeg")):
-                path = os.path.join(templates_dir, file)
-                img = cv2.imread(path, cv2.IMREAD_GRAYSCALE)
-                if img is not None:
-                    self.templates.append(img)
+    def __init__(self):
+        # القيم الافتراضية للقرص الأزرق (عدلها بناء على نتيجة الـ Tuner)
+        # هذا النطاق يغطي اللون السماوي/الأزرق للقاعدة
 
-        if not self.templates:
-            raise RuntimeError("No frog templates loaded")
+        self.lower_blue = np.array([88, 119, 86])
+        self.upper_blue = np.array([99, 255, 255])
 
-        print(f"[TEMPLATE] Loaded {len(self.templates)} frog templates")
-
+        self.kernel = np.ones((5, 5), np.uint8)
 
     def detect(self, frame):
-        gray = cv2.cvtColor(frame, cv2.COLOR_BGR2GRAY)
-        h_frame, w_frame = gray.shape[:2]
+        """
+        يعيد (x, y, w, h) للمربع المحيط بالقاعدة الزرقاء.
+        """
+        # تحويل إلى HSV
+        hsv = cv2.cvtColor(frame, cv2.COLOR_BGR2HSV)
 
-        best_score = 0
-        best_box = None
+        # عزل اللون الأزرق
+        mask = cv2.inRange(hsv, self.lower_blue, self.upper_blue)
 
-        scales = np.linspace(0.5, 1.8, 14)
+        # تنظيف الماسك
+        mask = cv2.morphologyEx(mask, cv2.MORPH_OPEN, self.kernel)
+        mask = cv2.morphologyEx(mask, cv2.MORPH_CLOSE, self.kernel)
 
-        for template in self.templates:
-            for scale in scales:
-                resized = cv2.resize(
-                    template,
-                    None,
-                    fx=scale,
-                    fy=scale,
-                    interpolation=cv2.INTER_LINEAR
-                )
+        # إيجاد الكونتورات
+        contours, _ = cv2.findContours(mask, cv2.RETR_EXTERNAL, cv2.CHAIN_APPROX_SIMPLE)
 
-                h, w = resized.shape[:2]
-                if h > h_frame or w > w_frame:
-                    continue
+        if not contours:
+            return None
 
-                result = cv2.matchTemplate(
-                    gray,
-                    resized,
-                    cv2.TM_CCOEFF_NORMED
-                )
+        # نأخذ أكبر جسم أزرق في الشاشة (يفترض أنه قاعدة القرد)
+        largest_cnt = max(contours, key=cv2.contourArea)
+        area = cv2.contourArea(largest_cnt)
 
-                _, max_val, _, max_loc = cv2.minMaxLoc(result)
+        # شرط أمان للحجم (حتى لا نلتقط كرة زرقاء صغيرة بالخطأ)
+        if area < 1000:  # رقم تقريبي، يمكن تعديله
+            return None
 
-                if max_val > self.threshold and max_val > best_score:
-                    best_score = max_val
-                    best_box = (max_loc[0], max_loc[1], w, h)
+        # استخراج المربع المحيط
+        x, y, w, h = cv2.boundingRect(largest_cnt)
 
-        return best_box, best_score
+        # توسيع المربع قليلاً (اختياري)
+        # لأن القاعدة أصغر قليلاً من رأس القرد ويديه
+        # سنضيف هامش بسيط ليغطي القرد كاملاً
+        padding = int(w * 0.05)  # 20% زيادة
+
+        # حساب الإحداثيات الجديدة مع التأكد من حدود الصورة
+        h_img, w_img = frame.shape[:2]
+        new_x = max(0, x - padding)
+        new_y = max(0, y - padding)
+        new_w = min(w_img - new_x, w + padding * 2)
+        new_h = min(h_img - new_y, h + padding * 2)
+
+        # إرجاع القيمة بنفس الصيغة التي يحبها الكود الأساسي
+        # نعيد ((box), score) لكي يتقبلها الكود الذي كتبناه سابقاً
+        # الـ Score هنا 1.0 لأننا واثقون من اللون
+        return (new_x, new_y, new_w, new_h), 1.0

@@ -10,6 +10,7 @@ try:
     from frog_detection.FrogTemplateDetector import FrogTemplateDetector
 except ImportError:
     import sys, os
+
     sys.path.append(os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
 
     from constants import *
@@ -34,10 +35,7 @@ if __name__ == "__main__":
         frame_count = 0
         start_time = time.time()
 
-        frog_detector = FrogTemplateDetector(
-            templates_dir="frog_detection/templates",
-            threshold=0.62
-        )
+        frog_detector = FrogTemplateDetector()
 
         print("[MAIN] Starting main loop...")
 
@@ -51,8 +49,7 @@ if __name__ == "__main__":
                 region_data = analyze_game_screen(screenshot)
                 if region_data:
                     capture_area = region_data.to_mss_dict(
-                        full_monitor["left"],
-                        full_monitor["top"]
+                        full_monitor["left"], full_monitor["top"]
                     )
 
                 last_recheck_time = loop_start
@@ -68,13 +65,7 @@ if __name__ == "__main__":
                     if frog_box:
                         x, y, w, h = frog_box
 
-                        cv2.rectangle(
-                            frame,
-                            (x, y),
-                            (x + w, y + h),
-                            (0, 0, 0),
-                            2
-                        )
+                        cv2.rectangle(frame, (x, y), (x + w, y + h), (0, 0, 0), 2)
 
                         cv2.putText(
                             frame,
@@ -83,7 +74,7 @@ if __name__ == "__main__":
                             cv2.FONT_HERSHEY_SIMPLEX,
                             0.6,
                             (0, 0, 0),
-                            2
+                            2,
                         )
 
                     frame_count += 1
@@ -100,7 +91,7 @@ if __name__ == "__main__":
                         cv2.FONT_HERSHEY_SIMPLEX,
                         0.7,
                         (255, 255, 255),
-                        2
+                        2,
                     )
 
                     cv2.imshow(window_name, frame)
@@ -117,7 +108,7 @@ if __name__ == "__main__":
                     cv2.FONT_HERSHEY_SIMPLEX,
                     0.9,
                     (0, 255, 255),
-                    2
+                    2,
                 )
                 cv2.imshow(window_name, blank)
 

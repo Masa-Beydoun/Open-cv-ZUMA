@@ -9,13 +9,12 @@ class ZumaFrogDetector:
 
         self.center_roi_ratio = 0.75
 
-        self.lower_green = np.array([35, 50, 40])
-        self.upper_green = np.array([85, 255, 255])
+        self.lower_green = np.array([70, 128, 102])
+        self.upper_green = np.array([84, 245, 215])
 
         self.kernel = cv2.getStructuringElement(
             cv2.MORPH_ELLIPSE, (5, 5)
         )
-
 
     def _center_roi(self, frame):
         cx, cy = self.w // 2, self.h // 2
@@ -29,7 +28,6 @@ class ZumaFrogDetector:
 
         return frame[y1:y2, x1:x2], (x1, y1)
 
-
     def _green_mask(self, frame):
         hsv = cv2.cvtColor(frame, cv2.COLOR_BGR2HSV)
 
@@ -40,7 +38,6 @@ class ZumaFrogDetector:
         mask = cv2.morphologyEx(mask, cv2.MORPH_CLOSE, self.kernel)
 
         return mask
-
 
     def _is_frog_blob(self, cnt, roi_area, roi_shape):
         area = cv2.contourArea(cnt)
@@ -78,7 +75,6 @@ class ZumaFrogDetector:
             return False
 
         return True
-
 
     def detect(self, frame, debug=True):
 
